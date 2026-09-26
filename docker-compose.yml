@@ -74,6 +74,16 @@ services:
     expose:
       - "4000"
     profiles: ["app"]
+    # Safe to scale to N replicas: the maintenance jobs elect a single leader
+    # through a Postgres advisory lock, so only one instance runs them. Every
+    # replica still serves API traffic. See docs/ARCHITECTURE.md.
+    deploy:
+      replicas: 1
+      update_config:
+        # Never let two versions of the API serve traffic at the same time:
+        # the old container must exit before the new one starts.
+        order: stop-first
+        parallelism: 0
 
   frontend:
     build:

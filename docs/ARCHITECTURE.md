@@ -70,6 +70,45 @@ silently exposing data.
 | Input safety | `whitelist` + `forbidNonWhitelisted` on the global ValidationPipe |
 | Headers | Helmet, HSTS, `X-Content-Type-Options`, `X-Frame-Options: DENY` |
 | Signing key | Server-side only, loaded from a file at boot, never returned by any endpoint |
+| Multi-instance | One Postgres advisory lock elects the scheduler leader, so N replicas never run the maintenance jobs N times |
+
+## Scaling and the maintenance jobs
+
+The API is stateless and safe to run as N replicas. The scheduled maintenance
+jobs are not — two instances reconciling licences at the same time would produce
+duplicate notifications and an inconsistent audit trail.
+
+That is handled by a **Postgres advisory lock**. Every instance calls
+`pg_try_advisory_lock` at boot (`SchedulerLockService`); only the winner logs
+"Scheduler lock acquired" and runs the cron jobs. Losers keep serving traffic but
+skip every tick. The lock is session-scoped, so it is released automatically if
+the leader's connection dies, and a standby can take over on its next start.
+
+The jobs are also individually idempotent, but idempotence is a backstop rather
+than a substitute for the lock: it does not stop two writers from interleaving
+mid-run.
+
+### Inspecting and triggering
+
+```bash
+# Is this instance the leader?          (requires admins.view)
+GET /api/v1/scheduler/status
+
+# Run a job now instead of waiting for the next tick   (requires admins.update)
+POST /api/v1/scheduler/run
+{ "job": "reconcile-licenses" }
+
+# accepted jobs: reconcile-licenses, refresh-settings,
+#                queue-expiry-notifications, audit-transitions
+```
+
+`POST /scheduler/run` returns **503** when another instance holds the lock,
+because a non-leader cannot know whether the leader is running that job at the
+same moment.
+
+This is what removes the need for a separate external cron: the same code path
+can be driven from Task Scheduler, a system cron, or a health check without
+duplicating any logic.
 
 ## License status is server-side truth
 
