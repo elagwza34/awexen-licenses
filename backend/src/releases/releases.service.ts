@@ -247,11 +247,18 @@ export class ReleasesService {
 
   /**
    * What the customer application sees when it checks for updates.
-   * Reports only — it never downloads or executes anything.
+   *
+   * Reports only — it never downloads or executes anything. A client compares
+   * `version` against its own and decides whether to prompt; it does not decide
+   * whether it may run, which is the licence check's job.
    */
-  async latestFor(platform: string) {
+  async latestFor(platform: string, channel = 'stable') {
     const latest = await this.prisma.appVersion.findFirst({
-      where: { status: AppVersionStatus.PUBLISHED, platform: platform.toUpperCase() as Platform },
+      where: {
+        status: AppVersionStatus.PUBLISHED,
+        platform: platform.toUpperCase() as Platform,
+        channel,
+      },
       orderBy: [{ version: 'desc' }, { buildNumber: 'desc' }],
     });
 
@@ -262,8 +269,12 @@ export class ReleasesService {
         version: latest.version,
         buildNumber: latest.buildNumber,
         platform: latest.platform,
+        channel: latest.channel,
         releasedAt: latest.releasedAt,
         downloadUrl: latest.downloadUrl,
+        // The client verifies the download against this before running it.
+        checksum: latest.checksum,
+        fileSize: latest.fileSize,
         isRequired: latest.isRequired,
         minSupportedVersion: latest.minSupportedVersion,
         releaseNotes: latest.releaseNotes,
