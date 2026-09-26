@@ -35,9 +35,31 @@ export class ApiError extends Error {
 
   readonly rawMessage: string | string[];
 
-  /** Single readable line, joining validation errors. */
+  /**
+   * A message safe to show a user.
+   *
+   * The server's own text is used whenever it was written for a human, but the
+   * framework also emits routing and internal errors whose text is technical,
+   * such as "Cannot POST /api/v1/portal/register". Showing that to a customer
+   * tells them nothing and makes the product look broken, so those are replaced
+   * with something that says what actually happened.
+   */
   get friendlyMessage(): string {
-    return this.message;
+    const text = this.message;
+
+    if (this.status === 404) {
+      return 'الخدمة المطلوبة غير متاحة حالياً. يرجى المحاولة بعد قليل.';
+    }
+    if (this.status >= 500) {
+      return 'حدث خطأ في الخادم. يرجى المحاولة بعد قليل.';
+    }
+
+    // NestJS reports an unrouted path by echoing the method and the path into
+    // the message. A string containing either is never copy written for a human.
+    if (/\b(GET|POST|PUT|PATCH|DELETE)\b|\/api\//i.test(text)) {
+      return 'تعذّر إتمام الطلب. يرجى المحاولة مرة أخرى.';
+    }
+    return text;
   }
 }
 
@@ -106,17 +128,26 @@ function buildUrl(path: string, params?: RequestOptions['params']): string {
 export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const { body, _retried, params, headers, ...rest } = options;
 
-  const response = await fetch(buildUrl(path, params), {
-    ...rest,
-    // The refresh cookie must travel with every request.
-    credentials: 'include',
-    headers: {
-      ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
-      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
-      ...headers,
-    },
-    ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
-  });
+  let response: Response;
+  try {
+    response = await fetch(buildUrl(path, params), {
+      ...rest,
+      // The refresh cookie must travel with every request.
+      credentials: 'include',
+      headers: {
+        ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
+        ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+        ...headers,
+      },
+      ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+    });
+  } catch {
+    // A DNS failure, a refused connection or a CORS rejection rejects before
+    // any status line exists, so there is nothing to read. Without this the
+    // raw browser text ("Failed to fetch", "Cannot POST /api/v1/...") reaches
+    // the user, which says nothing about what went wrong.
+    throw new ApiError(0, 'NETWORK_ERROR', 'تعذّر الاتصال بالخادم. تحقق من اتصالك بالإنترنت.');
+  }
 
   if (response.status === 401 && !_retried) {
     const refreshed = await refreshSession();
