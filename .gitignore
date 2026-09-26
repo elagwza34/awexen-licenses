@@ -1,0 +1,42 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build output
+dist/
+build/
+*.tsbuildinfo
+
+# Environment — NEVER commit real secrets
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Prisma
+backend/prisma/*.db
+backend/prisma/migrations/dev.db*
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-error.log*
+
+# Editor / OS
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db
+
+# Keys — the license signing private key must NEVER be committed
+keys/
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Test / coverage
+coverage/
+.nyc_output/

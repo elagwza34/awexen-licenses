@@ -1,0 +1,810 @@
+// ============================================================================
+// OWNER ADMIN PANEL — DATABASE SCHEMA
+// PostgreSQL + Prisma
+//
+// Design rules enforced here:
+//  * All money is stored as integer minor units + ISO currency
+//  * All dates are timestamptz (UTC). Display formatting is a UI concern only.
+//  * Historical records are never destroyed (licenses, payments, audit logs).
+//  * Enums live in Postgres so the DB itself rejects invalid states.
+// ============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ===========================================================================
+// ENUMS
+// ===========================================================================
+
+enum AdminStatus {
+  ACTIVE
+  INACTIVE
+  LOCKED
+}
+
+enum AdminRoleKey {
+  SUPER_ADMIN
+  ADMIN
+  SUPPORT_AGENT
+  FINANCE
+  VIEWER
+}
+
+enum CustomerStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+enum PlanStatus {
+  ACTIVE
+  ARCHIVED
+}
+
+enum FeatureStatus {
+  ACTIVE
+  DEPRECATED
+}
+
+enum FeatureCategory {
+  CORE
+  INVENTORY
+  SALES
+  REPORTING
+  INTEGRATION
+  PLATFORM
+}
+
+enum BillingInterval {
+  MONTHLY
+  QUARTERLY
+  YEARLY
+  LIFETIME
+}
+
+enum SubscriptionStatus {
+  TRIAL
+  ACTIVE
+  PAST_DUE
+  EXPIRED
+  CANCELLED
+  SUSPENDED
+}
+
+enum LicenseStatus {
+  TRIAL
+  EXPIRING
+  ACTIVE
+  EXPIRED
+  SUSPENDED
+  REVOKED
+}
+
+enum DeviceStatus {
+  ACTIVE
+  BLOCKED
+  REVOKED
+}
+
+enum ActivationType {
+  INITIAL
+  REACTIVATION
+  RENEWAL
+  DEVICE_RESET
+}
+
+enum ValidationStatus {
+  SUCCESS
+  FAILED
+  EXPIRED
+  SUSPENDED
+  INVALID
+  DEVICE_LIMIT
+  REVOKED
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  REFUNDED
+  CANCELLED
+}
+
+enum PaymentMethod {
+  BANK_TRANSFER
+  CASH
+  CARD
+  ONLINE
+  OTHER
+}
+
+enum TicketStatus {
+  OPEN
+  IN_PROGRESS
+  WAITING_CUSTOMER
+  RESOLVED
+  CLOSED
+}
+
+enum TicketPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum TicketMessageType {
+  REPLY
+  INTERNAL_NOTE
+}
+
+enum AppVersionStatus {
+  DRAFT
+  PUBLISHED
+  DEPRECATED
+}
+
+enum Platform {
+  WINDOWS
+  MACOS
+  LINUX
+}
+
+enum NotificationChannel {
+  EMAIL
+  WHATSAPP
+  IN_APP
+}
+
+enum NotificationStatus {
+  PENDING
+  SENT
+  FAILED
+  READ
+}
+
+enum AuditEntity {
+  ADMIN
+  CUSTOMER
+  PLAN
+  FEATURE
+  SUBSCRIPTION
+  LICENSE
+  DEVICE
+  ACTIVATION
+  VALIDATION
+  PAYMENT
+  SUPPORT_TICKET
+  APP_VERSION
+  SETTING
+}
+
+enum ProrationMode {
+  NONE
+  PRORATED_CREDIT
+  IMMEDIATE_CHARGE
+}
+
+enum SettingType {
+  STRING
+  NUMBER
+  BOOLEAN
+  JSON
+}
+
+// ===========================================================================
+// RBAC — roles, permissions, admins
+// ===========================================================================
+
+model Permission {
+  id          Int              @id @default(autoincrement())
+  /// Dotted key, e.g. "licenses.revoke" — unique and stable, never renumbered.
+  key         String           @unique @db.VarChar(100)
+  resource    String           @db.VarChar(60)
+  description String?
+  roles       RolePermission[]
+  createdAt   DateTime         @default(now()) @map("created_at")
+
+  @@map("permissions")
+}
+
+model Role {
+  id          Int              @id @default(autoincrement())
+  key         AdminRoleKey     @unique
+  name        String           @db.VarChar(80)
+  description String?
+  isSystem    Boolean          @default(false) @map("is_system")
+  permissions RolePermission[]
+  admins      AdminRole[]
+  createdAt   DateTime         @default(now()) @map("created_at")
+  updatedAt   DateTime         @updatedAt @map("updated_at")
+
+  @@map("roles")
+}
+
+model RolePermission {
+  roleId       Int
+  permissionId Int
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@index([permissionId])
+  @@map("role_permissions")
+}
+
+model Admin {
+  id                Int         @id @default(autoincrement())
+  email             String      @unique @db.VarChar(180)
+  name              String      @db.VarChar(120)
+  /// Argon2id hash — plaintext passwords are NEVER stored or logged.
+  passwordHash      String      @map("password_hash") @db.VarChar(255)
+  passwordChangedAt DateTime?   @map("password_changed_at")
+  status            AdminStatus @default(ACTIVE)
+  phone             String?     @db.VarChar(40)
+  avatarUrl         String?     @map("avatar_url") @db.VarChar(500)
+  locale            String      @default("ar") @db.VarChar(10)
+
+  // ---- Optional TOTP 2FA (architecture ready) ----
+  twoFactorEnabled   Boolean @default(false) @map("two_factor_enabled")
+  /// AES-256-GCM ciphertext of the TOTP secret; never returned by any endpoint.
+  twoFactorSecretEnc String? @map("two_factor_secret_enc") @db.VarChar(512)
+
+  lastLoginAt  DateTime? @map("last_login_at")
+  lastLoginIp  String?   @map("last_login_ip") @db.VarChar(64)
+  failedLogins Int       @default(0) @map("failed_logins")
+  lockedUntil  DateTime? @map("locked_until")
+
+  roles           AdminRole[]
+  refreshTokens   RefreshToken[]
+  loginAttempts   LoginAttempt[]
+  auditLogs       AuditLog[]
+  assignedTickets SupportTicket[]        @relation("TicketAssignee")
+  ticketMessages  SupportTicketMessage[]
+  notifications   Notification[]
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  @@index([status])
+  @@map("admins")
+}
+
+model AdminRole {
+  adminId   Int
+  roleId    Int
+  admin     Admin    @relation(fields: [adminId], references: [id], onDelete: Cascade)
+  role      Role     @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@id([adminId, roleId])
+  @@index([roleId])
+  @@map("admin_roles")
+}
+
+/// Rotating refresh tokens. Only a SHA-256 hash is stored, so a database leak
+/// cannot be replayed against the API.
+model RefreshToken {
+  id            Int       @id @default(autoincrement())
+  adminId       Int       @map("admin_id")
+  admin         Admin     @relation(fields: [adminId], references: [id], onDelete: Cascade)
+  tokenHash     String    @unique @map("token_hash") @db.VarChar(128)
+  /// Tokens that share a family are one login. Reuse of a rotated token
+  /// revokes the entire family (theft detection).
+  familyId      String    @map("family_id") @db.VarChar(64)
+  userAgent     String?   @map("user_agent") @db.VarChar(400)
+  ip            String?   @db.VarChar(64)
+  expiresAt     DateTime  @map("expires_at")
+  revokedAt     DateTime? @map("revoked_at")
+  revokedReason String?   @map("revoked_reason") @db.VarChar(120)
+  createdAt     DateTime  @default(now()) @map("created_at")
+
+  @@index([adminId, revokedAt])
+  @@index([familyId])
+  @@index([expiresAt])
+  @@map("refresh_tokens")
+}
+
+/// Every login attempt, successful or not — feeds security monitoring.
+model LoginAttempt {
+  id        Int      @id @default(autoincrement())
+  adminId   Int?
+  admin     Admin?   @relation(fields: [adminId], references: [id], onDelete: SetNull)
+  email     String   @db.VarChar(180)
+  success   Boolean
+  reason    String?  @db.VarChar(120)
+  ip        String?  @db.VarChar(64)
+  userAgent String?  @map("user_agent") @db.VarChar(400)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([email, createdAt])
+  @@index([adminId, createdAt])
+  @@map("login_attempts")
+}
+
+// ===========================================================================
+// FEATURES & PLANS
+// ===========================================================================
+
+model Feature {
+  id          Int             @id @default(autoincrement())
+  /// Stable machine key, e.g. "MULTI_WAREHOUSE" — referenced by customer apps.
+  key         String          @unique @db.VarChar(80)
+  name        String          @db.VarChar(120)
+  nameAr      String?         @map("name_ar") @db.VarChar(120)
+  description String?
+  category    FeatureCategory @default(CORE)
+  status      FeatureStatus   @default(ACTIVE)
+  plans       PlanFeature[]
+  createdAt   DateTime        @default(now()) @map("created_at")
+  updatedAt   DateTime        @updatedAt @map("updated_at")
+
+  @@index([status, category])
+  @@map("features")
+}
+
+model Plan {
+  id              Int             @id @default(autoincrement())
+  key             String          @unique @db.VarChar(60)
+  name            String          @db.VarChar(120)
+  nameAr          String?         @map("name_ar") @db.VarChar(120)
+  description     String?
+  /// Price in minor units. 0 for trial tiers.
+  price           Int             @default(0)
+  currency        String          @default("EGP") @db.Char(3)
+  billingInterval BillingInterval @default(MONTHLY) @map("billing_interval")
+  trialDays       Int             @default(0) @map("trial_days")
+  maxDevices      Int             @default(1) @map("max_devices")
+  sortOrder       Int             @default(0) @map("sort_order")
+  isPopular       Boolean         @default(false) @map("is_popular")
+  status          PlanStatus      @default(ACTIVE)
+  isTrialPlan     Boolean         @default(false) @map("is_trial_plan")
+
+  features      PlanFeature[]
+  subscriptions Subscription[]
+  licenses      License[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([status, sortOrder])
+  @@map("plans")
+}
+
+/// Join table. Entitlements are data, never hardcoded in application code.
+model PlanFeature {
+  planId    Int
+  featureId Int
+  plan      Plan     @relation(fields: [planId], references: [id], onDelete: Cascade)
+  feature   Feature  @relation(fields: [featureId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@id([planId, featureId])
+  @@index([featureId])
+  @@map("plan_features")
+}
+
+// ===========================================================================
+// CUSTOMERS
+// ===========================================================================
+
+model Customer {
+  id        Int            @id @default(autoincrement())
+  name      String         @db.VarChar(160)
+  company   String?        @db.VarChar(160)
+  email     String         @unique @db.VarChar(180)
+  phone     String?        @db.VarChar(40)
+  address   String?
+  city      String?        @db.VarChar(120)
+  country   String?        @db.VarChar(80)
+  taxNumber String?        @map("tax_number") @db.VarChar(60)
+  notes     String?
+  status    CustomerStatus @default(ACTIVE)
+
+  subscriptions Subscription[]
+  licenses      License[]
+  payments      Payment[]
+  tickets       SupportTicket[]
+  activations   Activation[]
+  validations   LicenseValidation[]
+  invoices      Invoice[]
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  @@index([status])
+  @@index([company])
+  @@index([createdAt])
+  @@map("customers")
+}
+
+/// Invoice documents. Financial history is append-only.
+model Invoice {
+  id             Int           @id @default(autoincrement())
+  number         String        @unique @db.VarChar(60)
+  customerId     Int
+  customer       Customer      @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  subscriptionId Int?          @map("subscription_id")
+  subscription   Subscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+  amount         Int
+  currency       String        @default("EGP") @db.Char(3)
+  status         PaymentStatus @default(PENDING)
+  issuedAt       DateTime      @default(now()) @map("issued_at")
+  notes          String?
+  createdAt      DateTime      @default(now()) @map("created_at")
+  updatedAt      DateTime      @updatedAt @map("updated_at")
+
+  @@index([customerId, issuedAt])
+  @@map("invoices")
+}
+
+// ===========================================================================
+// SUBSCRIPTIONS
+// ===========================================================================
+
+model Subscription {
+  id         Int      @id @default(autoincrement())
+  customerId Int
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  planId     Int
+  plan       Plan     @relation(fields: [planId], references: [id], onDelete: Restrict)
+
+  status          SubscriptionStatus @default(ACTIVE)
+  billingInterval BillingInterval    @default(MONTHLY) @map("billing_interval")
+  autoRenew       Boolean            @default(true) @map("auto_renew")
+  price           Int
+  currency        String             @default("EGP") @db.Char(3)
+
+  startsAt     DateTime  @map("starts_at")
+  expiresAt    DateTime? @map("expires_at") // null = lifetime
+  trialEndsAt  DateTime? @map("trial_ends_at")
+  cancelledAt  DateTime? @map("cancelled_at")
+  cancelReason String?   @map("cancel_reason") @db.VarChar(400)
+
+  /// Churn tracking: set when the subscription ends for a non-cancelled reason.
+  endedAt       DateTime?     @map("ended_at")
+  prorationMode ProrationMode @default(NONE) @map("proration_mode")
+
+  licenses License[]
+  payments Payment[]
+  invoices Invoice[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([customerId, status])
+  @@index([status, expiresAt])
+  @@index([expiresAt])
+  @@map("subscriptions")
+}
+
+// ===========================================================================
+// LICENSES
+// ===========================================================================
+
+model License {
+  id             Int           @id @default(autoincrement())
+  /// Human-facing key, e.g. "PROD-7F3A-92KD-0XLM-QP4E". Unique forever —
+  /// revoked keys are never reused or deleted.
+  licenseKey     String        @unique @map("license_key") @db.VarChar(64)
+  customerId     Int
+  customer       Customer      @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  subscriptionId Int?
+  subscription   Subscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+  planId         Int
+  plan           Plan          @relation(fields: [planId], references: [id], onDelete: Restrict)
+
+  status     LicenseStatus @default(ACTIVE)
+  startsAt   DateTime      @map("starts_at")
+  expiresAt  DateTime?     @map("expires_at")
+  maxDevices Int           @default(1) @map("max_devices")
+  isTrial    Boolean       @default(false) @map("is_trial")
+  /// Bumped on every renewal/plan change so offline caches detect a new payload.
+  version    Int           @default(1)
+  notes      String?
+
+  lastValidationAt DateTime? @map("last_validation_at")
+  lastSeenAt       DateTime? @map("last_seen_at")
+  lastActivationAt DateTime? @map("last_activation_at")
+  /// Signature over the canonical license payload. Private key stays server-side.
+  signature        String?   @db.Text
+  payloadHash      String?   @map("payload_hash") @db.VarChar(128)
+
+  revokedAt       DateTime? @map("revoked_at")
+  revokedReason   String?   @map("revoked_reason") @db.VarChar(400)
+  suspendedAt     DateTime? @map("suspended_at")
+  suspendedReason String?   @map("suspended_reason") @db.VarChar(400)
+  /// A REVOKED license must be re-issued, never silently reactivated.
+  reissueOfId     Int?      @map("reissue_of_id")
+
+  devices     Device[]
+  activations Activation[]
+  validations LicenseValidation[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([customerId, status])
+  @@index([status, expiresAt])
+  @@index([planId])
+  @@index([expiresAt])
+  @@map("licenses")
+}
+
+model Device {
+  id                Int          @id @default(autoincrement())
+  licenseId         Int
+  license           License      @relation(fields: [licenseId], references: [id], onDelete: Cascade)
+  /// Stable hash of machine identifiers. Unique per license, so the same machine
+  /// cannot consume a second device slot.
+  deviceFingerprint String       @map("device_fingerprint") @db.VarChar(128)
+  deviceName        String?      @map("device_name") @db.VarChar(180)
+  platform          String?      @db.VarChar(40)
+  osVersion         String?      @map("os_version") @db.VarChar(80)
+  appVersion        String?      @map("app_version") @db.VarChar(40)
+  status            DeviceStatus @default(ACTIVE)
+  activatedAt       DateTime     @default(now()) @map("activated_at")
+  lastSeenAt        DateTime?    @map("last_seen_at")
+  lastValidationAt  DateTime?    @map("last_validation_at")
+  lastIp            String?      @map("last_ip") @db.VarChar(64)
+  blockedAt         DateTime?    @map("blocked_at")
+  blockedReason     String?      @map("blocked_reason") @db.VarChar(300)
+  revokedAt         DateTime?    @map("revoked_at")
+
+  activations Activation[]
+  validations LicenseValidation[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([licenseId, deviceFingerprint])
+  @@index([licenseId, status])
+  @@index([lastSeenAt])
+  @@map("devices")
+}
+
+model Activation {
+  id             Int            @id @default(autoincrement())
+  licenseId      Int
+  license        License        @relation(fields: [licenseId], references: [id], onDelete: Cascade)
+  deviceId       Int?
+  device         Device?        @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+  customerId     Int
+  customer       Customer       @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  activationType ActivationType @default(INITIAL) @map("activation_type")
+  success        Boolean
+  failureReason  String?        @map("failure_reason") @db.VarChar(200)
+  ip             String?        @db.VarChar(64)
+  userAgent      String?        @map("user_agent") @db.VarChar(400)
+  appVersion     String?        @map("app_version") @db.VarChar(40)
+  performedById  Int?           @map("performed_by_id")
+  note           String?        @db.VarChar(400)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([licenseId, createdAt])
+  @@index([customerId, createdAt])
+  @@index([deviceId])
+  @@map("activations")
+}
+
+model LicenseValidation {
+  id         Int              @id @default(autoincrement())
+  licenseId  Int
+  license    License          @relation(fields: [licenseId], references: [id], onDelete: Cascade)
+  deviceId   Int?
+  device     Device?          @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+  customerId Int
+  customer   Customer         @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  status     ValidationStatus
+  reason     String?          @db.VarChar(200)
+  ip         String?          @db.VarChar(64)
+  appVersion String?          @map("app_version") @db.VarChar(40)
+  latencyMs  Int?             @map("latency_ms")
+  /// When the client's cached lease expires — drives the client offline window.
+  validUntil DateTime?        @map("valid_until")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([licenseId, createdAt])
+  @@index([status, createdAt])
+  @@index([customerId])
+  @@map("license_validations")
+}
+
+// ===========================================================================
+// PAYMENTS
+// ===========================================================================
+
+model Payment {
+  id             Int           @id @default(autoincrement())
+  customerId     Int
+  customer       Customer      @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  subscriptionId Int?          @map("subscription_id")
+  subscription   Subscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+  invoiceId      Int?          @map("invoice_id")
+
+  amount               Int
+  currency             String        @default("EGP") @db.Char(3)
+  method               PaymentMethod @default(BANK_TRANSFER)
+  status               PaymentStatus @default(PENDING)
+  /// Bank/gateway reference. Unique when present, so the same transfer can never
+  /// be imported twice.
+  transactionReference String?       @unique @map("transaction_reference") @db.VarChar(120)
+  paidAt               DateTime?     @map("paid_at")
+  /// Refunds never delete the original row.
+  refundedAmount       Int           @default(0) @map("refunded_amount")
+  refundReason         String?       @map("refund_reason") @db.VarChar(400)
+  notes                String?
+  verifiedById         Int?          @map("verified_by_id")
+  verifiedAt           DateTime?     @map("verified_at")
+  receiptUrl           String?       @map("receipt_url") @db.VarChar(500)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([customerId, createdAt])
+  @@index([status, createdAt])
+  @@index([subscriptionId])
+  @@map("payments")
+}
+
+// ===========================================================================
+// SUPPORT
+// ===========================================================================
+
+model SupportTicket {
+  id              Int            @id @default(autoincrement())
+  number          String         @unique @db.VarChar(30)
+  customerId      Int
+  customer        Customer       @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  licenseId       Int?
+  subject         String         @db.VarChar(300)
+  status          TicketStatus   @default(OPEN)
+  priority        TicketPriority @default(MEDIUM)
+  assignedAdminId Int?           @map("assigned_admin_id")
+  assignedAdmin   Admin?         @relation("TicketAssignee", fields: [assignedAdminId], references: [id], onDelete: SetNull)
+  resolvedAt      DateTime?      @map("resolved_at")
+  closedAt        DateTime?      @map("closed_at")
+
+  messages SupportTicketMessage[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([status, priority])
+  @@index([customerId, createdAt])
+  @@index([assignedAdminId, status])
+  @@map("support_tickets")
+}
+
+model SupportTicketMessage {
+  id        Int               @id @default(autoincrement())
+  ticketId  Int
+  ticket    SupportTicket     @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  adminId   Int?
+  admin     Admin?            @relation(fields: [adminId], references: [id], onDelete: SetNull)
+  type      TicketMessageType @default(REPLY)
+  body      String            @db.Text
+  createdAt DateTime          @default(now()) @map("created_at")
+
+  @@index([ticketId, createdAt])
+  @@map("support_ticket_messages")
+}
+
+// ===========================================================================
+// APPLICATION VERSIONS / RELEASES
+// ===========================================================================
+
+model AppVersion {
+  id                  Int              @id @default(autoincrement())
+  version             String           @db.VarChar(40)
+  buildNumber         Int              @map("build_number")
+  platform            Platform         @default(WINDOWS)
+  channel             String           @default("stable") @db.VarChar(40)
+  status              AppVersionStatus @default(DRAFT)
+  releaseNotes        String?          @map("release_notes") @db.Text
+  downloadUrl         String?          @map("download_url") @db.VarChar(500)
+  checksum            String?          @db.VarChar(128)
+  fileSize            BigInt?          @map("file_size")
+  /// Customers below this version must update before the app will run.
+  isRequired          Boolean          @default(false) @map("is_required")
+  minSupportedVersion String?          @map("min_supported_version") @db.VarChar(40)
+  releasedAt          DateTime?        @map("released_at")
+  createdAt           DateTime         @default(now()) @map("created_at")
+  updatedAt           DateTime         @updatedAt @map("updated_at")
+
+  @@unique([version, buildNumber, platform, channel])
+  @@index([status, platform])
+  @@map("app_versions")
+}
+
+// ===========================================================================
+// AUDIT — append only. There is no updatedAt here, by design.
+// ===========================================================================
+
+model AuditLog {
+  id         Int         @id @default(autoincrement())
+  adminId    Int?
+  admin      Admin?      @relation(fields: [adminId], references: [id], onDelete: SetNull)
+  /// Denormalised so the trail survives admin deletion.
+  adminEmail String?     @map("admin_email") @db.VarChar(180)
+  action     String      @db.VarChar(120)
+  entity     AuditEntity
+  entityId   String?     @map("entity_id") @db.VarChar(64)
+  /// JSON snapshots — old/new. Written inside the same transaction as the change.
+  oldValue   Json?       @map("old_value")
+  newValue   Json?       @map("new_value")
+  metadata   Json?
+  ip         String?     @db.VarChar(64)
+  userAgent  String?     @map("user_agent") @db.VarChar(400)
+  requestId  String?     @map("request_id") @db.VarChar(64)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([entity, entityId, createdAt])
+  @@index([adminId, createdAt])
+  @@index([action, createdAt])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+// ===========================================================================
+// NOTIFICATIONS — outbox pattern; delivery providers plug in later.
+// ===========================================================================
+
+model Notification {
+  id          Int                 @id @default(autoincrement())
+  adminId     Int?
+  admin       Admin?              @relation(fields: [adminId], references: [id], onDelete: SetNull)
+  customerId  Int?
+  type        String              @db.VarChar(80)
+  channel     NotificationChannel
+  status      NotificationStatus  @default(PENDING)
+  title       String              @db.VarChar(200)
+  titleAr     String?             @map("title_ar") @db.VarChar(200)
+  body        String              @db.Text
+  payload     Json?
+  scheduledAt DateTime            @default(now()) @map("scheduled_at")
+  sentAt      DateTime?           @map("sent_at")
+  failedAt    DateTime?           @map("failed_at")
+  error       String?             @db.VarChar(500)
+  attempts    Int                 @default(0)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([status, scheduledAt])
+  @@index([customerId])
+  @@map("notifications")
+}
+
+// ===========================================================================
+// SETTINGS — runtime-tunable business rules. Never hardcoded in code.
+// ===========================================================================
+
+model Setting {
+  key           String      @id @db.VarChar(120)
+  value         Json
+  type          SettingType @default(STRING)
+  label         String?     @db.VarChar(160)
+  labelAr       String?     @map("label_ar") @db.VarChar(160)
+  group         String      @default("general") @db.VarChar(60)
+  description   String?
+  descriptionAr String?     @map("description_ar") @db.VarChar(400)
+  /// Sensitive values require re-auth + confirmation in the UI.
+  isSensitive   Boolean     @default(false) @map("is_sensitive")
+  updatedById   Int?        @map("updated_by_id")
+  updatedAt     DateTime    @updatedAt @map("updated_at")
+  createdAt     DateTime    @default(now()) @map("created_at")
+
+  @@map("settings")
+}
