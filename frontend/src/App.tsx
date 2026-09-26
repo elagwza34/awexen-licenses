@@ -6,10 +6,13 @@ import { AuthProvider } from '@/hooks/use-auth';
 import { ToastProviderHost } from '@/hooks/use-toast';
 import { AnalyticsPage } from '@/pages/analytics';
 import { AuditLogsPage } from '@/pages/audit-logs';
+import { ActivationsPage } from '@/pages/activations';
 import { CustomerDetailPage } from '@/pages/customer-detail';
 import { CustomersPage } from '@/pages/customers';
 import { DashboardPage } from '@/pages/dashboard';
 import { DevicesPage } from '@/pages/devices';
+import { ExpirationsPage } from '@/pages/expirations';
+import { FeaturesPage } from '@/pages/features';
 import { LicenseDetailPage } from '@/pages/license-detail';
 import { LicensesPage } from '@/pages/licenses';
 import { LoginPage } from '@/pages/login';
@@ -57,6 +60,9 @@ export default function App() {
                   <Route path="licenses/:id" element={<LicenseDetailPage />} />
                   <Route path="subscriptions" element={<SubscriptionsPage />} />
                   <Route path="devices" element={<DevicesPage />} />
+                  <Route path="activations" element={<ActivationsPage />} />
+                  <Route path="expirations" element={<ExpirationsPage />} />
+                  <Route path="features" element={<FeaturesPage />} />
                   <Route path="payments" element={<PaymentsPage />} />
                   <Route path="support" element={<SupportPage />} />
                   <Route path="releases" element={<ReleasesPage />} />

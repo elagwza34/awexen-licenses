@@ -3,7 +3,9 @@ import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import { IsOptional, IsString, Length, MaxLength } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { Public } from '../common/decorators';
+import { Public, RequirePermissions } from '../common/decorators';
+import { PrismaService } from '../common/prisma/prisma.service';
+import { AnalyticsService } from '../analytics/analytics.service';
 import { LicenseValidationService, type ValidateRequest } from './license-validation.service';
 
 export class ValidateLicenseDto implements ValidateRequest {
@@ -30,7 +32,11 @@ export class ValidateLicenseDto implements ValidateRequest {
 @ApiTags('License Validation (public)')
 @Controller('validations')
 export class LicenseValidationController {
-  constructor(private readonly validation: LicenseValidationService) {}
+  constructor(
+    private readonly validation: LicenseValidationService,
+    private readonly prisma: PrismaService,
+    private readonly analytics: AnalyticsService,
+  ) {}
 
   @Public()
   @Post('validate')
@@ -47,7 +53,8 @@ export class LicenseValidationController {
   }
 
   @Get('history')
-  @ApiOperation({ summary: 'Validation history (owner panel only)' })
+  @RequirePermissions('validations.view')
+  @ApiOperation({ summary: 'Validation history for the owner panel' })
   async history(@Query('licenseId') licenseId?: string, @Query() rest: Record<string, any> = {}) {
     return this.validation.history({
       licenseId: licenseId ? Number(licenseId) : undefined,
@@ -55,5 +62,45 @@ export class LicenseValidationController {
       page: rest.page ? Number(rest.page) : undefined,
       limit: rest.limit ? Number(rest.limit) : undefined,
     });
+  }
+
+  @Get('activations')
+  @RequirePermissions('activations.view')
+  @ApiOperation({ summary: 'Activation history (first activation, reactivation, renewals, resets)' })
+  async activations(@Query() query: Record<string, any> = {}) {
+    const page = Math.max(1, Number(query.page) || 1);
+    const limit = Math.min(Math.max(Number(query.limit) || 25, 1), 100);
+    const where: Record<string, any> = {};
+    if (query.licenseId) where.licenseId = Number(query.licenseId);
+    if (query.customerId) where.customerId = Number(query.customerId);
+    if (query.success !== undefined) where.success = query.success === 'true';
+
+    const [total, rows] = await Promise.all([
+      this.prisma.activation.count({ where }),
+      this.prisma.activation.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * limit,
+        take: limit,
+        include: {
+          license: { select: { id: true, licenseKey: true } },
+          device: { select: { id: true, deviceName: true } },
+        },
+      }),
+    ]);
+
+    return {
+      data: rows,
+      meta: { total, page, limit, totalPages: Math.max(1, Math.ceil(total / limit)) },
+    };
+  }
+
+  @Get('health')
+  @RequirePermissions('validations.view')
+  @ApiOperation({ summary: 'Validation success rate over a window' })
+  async health(@Query('days') days?: number) {
+    // The aggregation lives in AnalyticsService — one implementation, so the
+    // panel and the API can never report different numbers.
+    return this.analytics.validationHealth(days ? Math.min(Math.max(Number(days), 1), 365) : 30);
   }
 }
