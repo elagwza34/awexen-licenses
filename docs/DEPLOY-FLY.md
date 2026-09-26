@@ -26,8 +26,12 @@ flyctl auth whoami         # must print your account
 > `fly.toml` and try to attach a Fly Postgres. Create the app explicitly:
 > ```powershell
 > cd backend
-> flyctl apps create owneradmin-api --org personal --region fra
+> flyctl apps create owneradmin-api --org personal
 > ```
+>
+> There is no `--region` flag on `apps create`. The region comes from
+> `primary_region = "fra"` in `fly.toml` and is applied on the first
+> `flyctl deploy`.
 
 ---
 

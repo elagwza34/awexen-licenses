@@ -62,8 +62,10 @@ $adminPassword = [Convert]::ToBase64String([Security.Cryptography.RandomNumberGe
 
 Write-Host "Uploading secrets to Fly app '$App'..." -ForegroundColor Cyan
 
-# --stdin keeps the values out of the process argument list, where any other
-# local user could read them from the process table.
+# `secrets import` reads NAME=VALUE pairs from stdin, which keeps every value
+# out of the process argument list where another local user could read it from
+# the process table. (Note: `secrets set` in this flyctl version has no
+# --stdin flag, so import is the correct command here.)
 $secrets = @(
   "DATABASE_URL=$DatabaseUrl"
   "JWT_ACCESS_SECRET=$jwtSecret"
@@ -74,8 +76,8 @@ $secrets = @(
   "LICENSE_PRIVATE_KEY_PEM=$privateKey"
 ) -join "`n"
 
-$secrets | flyctl secrets set --app $App --stdin
-if ($LASTEXITCODE -ne 0) { throw 'flyctl secrets set failed.' }
+$secrets | flyctl secrets import --app $App
+if ($LASTEXITCODE -ne 0) { throw 'flyctl secrets import failed.' }
 
 # Setting a secret restarts the app, but the release command only runs on
 # `flyctl deploy`. Re-deploying now guarantees the machine comes up against the
