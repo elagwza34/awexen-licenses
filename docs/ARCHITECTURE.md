@@ -72,7 +72,138 @@ silently exposing data.
 | Signing key | Server-side only, loaded from a file at boot, never returned by any endpoint |
 | Multi-instance | One Postgres advisory lock elects the scheduler leader, so N replicas never run the maintenance jobs N times |
 
-## Scaling and the maintenance jobs
+## Going live
+
+Everything below is a setting, not code. The two systems are deployed
+separately and talk to each other over HTTPS only.
+
+```
+   customers                      you (the owner)
+   ┌──────────────┐               ┌────────────────────────┐
+   │  PMS install │──HTTPS──────► │  owner-admin on a      │
+   │  on their PC │  validate +   │  domain (VPS + Docker)  │
+   │              │  update check │                        │
+   └──────────────┘               └────────────────────────┘
+```
+
+The PMS never needs a public address of its own — it is on the customer's
+machine and calls out.
+
+---
+
+## 1. Buy the domain and a host
+
+| What | Where | Notes |
+|------|-------|-------|
+| Domain | Cloudflare Registrar | At cost, no markup, no need to buy elsewhere |
+| VPS | Hetzner / DigitalOcean / Contabo | 2GB RAM is enough; the panel is idle most of the time |
+
+Do **not** use shared hosting: the API is a long-running Node process and the
+scheduler needs a process that stays alive. See `docs/SETUP.md`.
+
+---
+
+## 2. Point the domain at the host
+
+One A record is enough:
+
+| Type | Name | Value |
+|------|------|-------|
+| A | `admin` | the VPS IP address |
+
+Enable Cloudflare's orange cloud (proxy on). That gives you TLS, hides the
+origin IP, and includes basic DDoS protection — and it means you do not have to
+run certbot or renew certificates.
+
+---
+
+## 3. Configure the panel
+
+Everything lives in `.env` on the server:
+
+```bash
+SERVER_NAME=admin.yourdomain.com
+API_PUBLIC_URL=https://admin.yourdomain.com
+CORS_ORIGINS=https://admin.yourdomain.com
+NODE_ENV=production
+```
+
+`SERVER_NAME` is substituted into nginx's `server_name` at container start, so
+one config serves any hostname. The API **refuses to boot in production** if it
+is still the example default, which is deliberate: a half-configured deployment
+should fail loudly rather than serve on the wrong name.
+
+Generate the secrets:
+
+```bash
+openssl rand -base64 48   # JWT_ACCESS_SECRET
+openssl rand -base64 48   # JWT_REFRESH_SECRET
+openssl rand -base64 32   # PASSWORD_PEPPER
+
+mkdir -p keys
+openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:3072 -out keys/license-private.pem
+openssl rsa -pubout -in keys/license-private.pem -out keys/license-public.pem
+```
+
+> **Back up `keys/license-private.pem` before you deploy.** If it is lost, every
+> licence already issued fails validation on the customer's machine. It is not
+> recoverable.
+
+Then:
+
+```bash
+docker compose --profile app up -d --build
+```
+
+---
+
+## 4. Build the customer package
+
+On your own machine, not the server:
+
+```powershell
+cd pms\packaging
+.\build.ps1 -Version 1.0.0 -BuildNumber 1 `
+            -LicenseServerUrl https://admin.yourdomain.com/api/v1
+.\package.ps1 -Version 1.0.0
+```
+
+`config.txt` ships inside the package, so an installed copy can be repointed
+later by editing one line and restarting — no reinstall.
+
+---
+
+## 5. When you publish a new version
+
+1. Upload the new build somewhere the customer can download it.
+2. In the panel: **الإصدارات → إضافة إصدار** — version, build number, download
+   URL, and the SHA-256 checksum.
+3. **نشر** it.
+
+Installed copies check `/releases/latest` at startup and show a banner if the
+published version is newer. The check is advisory only: a customer can keep
+working on an old build. Nothing about updates can lock anyone out — that is the
+licence check's job, and mixing the two would let a network hiccup lock out a
+paying customer.
+
+Set `minSupportedVersion` plus **مطلوب** only for a security fix you need
+customers to have.
+
+---
+
+## 6. Publishing the download itself
+
+The panel stores a URL, not a file. Anywhere works — an S3 bucket, a CDN, your
+own VPS. If you host the files on the panel's own server, put them behind
+Nginx rather than serving them from the API.
+
+**Sign the installer.** Windows SmartScreen shows a scary warning for any
+unsigned `.exe`. A code-signing certificate removes it. Without one, say so in
+your download instructions, otherwise customers will assume the file is
+malware.
+
+---
+
 
 The API is stateless and safe to run as N replicas. The scheduled maintenance
 jobs are not — two instances reconciling licences at the same time would produce
