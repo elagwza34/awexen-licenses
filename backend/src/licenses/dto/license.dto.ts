@@ -65,7 +65,8 @@ export class RenewLicenseDto {
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(60)
   periods?: number;
 
-  @ApiPropertyOptional() @IsString() @MaxLength(400)
+  @ApiPropertyOptional()
+  @IsOptional() @IsString() @MaxLength(400)
   reason?: string;
 }
 

@@ -1,0 +1,25 @@
+{
+  "name": "owner-admin",
+  "version": "1.0.0",
+  "private": true,
+  "description": "The commercial control centre for a licensed inventory / POS product.",
+  "license": "UNLICENSED",
+  "scripts": {
+    "db:start": "tools\\pgsql\\bin\\pg_ctl.exe -D tools\\pgdata -l tools\\pg.log -o \"-p 5432 -h 127.0.0.1\" start",
+    "db:stop": "tools\\pgsql\\bin\\pg_ctl.exe -D tools\\pgdata stop",
+    "db:status": "tools\\pgsql\\bin\\pg_ctl.exe -D tools\\pgdata status",
+    "migrate": "npm --prefix backend run prisma:migrate",
+    "seed": "npm --prefix backend run prisma:seed",
+    "keygen": "npm --prefix backend run keygen",
+    "api": "npm --prefix backend run start:dev",
+    "web": "npm --prefix frontend run dev",
+    "build": "npm --prefix backend run build && npm --prefix frontend run build",
+    "typecheck": "npm --prefix backend run typecheck && npm --prefix frontend run typecheck",
+    "verify": "npm --prefix backend run verify:all",
+    "e2e": "node tools/e2e-test.mjs",
+    "test": "npm run typecheck && npm run verify"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

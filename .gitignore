@@ -40,3 +40,29 @@ keys/
 # Test / coverage
 coverage/
 .nyc_output/
+
+# ---- Local development database (portable PostgreSQL) ----
+# Binaries, the data cluster and logs must never enter the repository.
+tools/pgsql/
+tools/pgdata/
+tools/.pgdata/
+tools/*.zip
+tools/*.log
+tools/*.err
+backend/api.log
+backend/api.err
+run.txt
+e2e-out.txt
+
+# ---- Local development database (portable PostgreSQL) ----
+# Binaries, the data cluster and logs must never enter the repository.
+tools/pgsql/
+tools/pgdata/
+tools/.pgdata/
+tools/*.zip
+tools/*.log
+tools/*.err
+backend/api.log
+backend/api.err
+run.txt
+e2e-out.txt

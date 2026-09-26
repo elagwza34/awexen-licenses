@@ -286,7 +286,14 @@ async function seedOwner() {
   }
 
   const superAdminRole = await prisma.role.findUniqueOrThrow({ where: { key: AdminRoleKey.SUPER_ADMIN } });
-  const hash = await argon2.hash(password, {
+
+  // The hash MUST be produced exactly the way SecurityService.hashPassword does
+  // it, pepper included — otherwise verifyPassword() can never match it and the
+  // seeded owner silently cannot sign in.
+  const pepper = process.env.PASSWORD_PEPPER ?? '';
+  const salted = pepper ? `${password}::${pepper}` : password;
+
+  const hash = await argon2.hash(salted, {
     type: argon2.argon2id,
     memoryCost: 19456,
     timeCost: 2,
@@ -295,7 +302,9 @@ async function seedOwner() {
 
   const admin = await prisma.admin.upsert({
     where: { email },
-    update: {},
+    // Re-hash on every seed run so a fix to the hashing scheme (or a changed
+    // pepper) actually takes effect instead of leaving a stale unusable hash.
+    update: { passwordHash: hash },
     create: {
       email,
       name: process.env.SEED_ADMIN_NAME ?? 'Software Owner',

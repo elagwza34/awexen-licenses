@@ -162,6 +162,53 @@ period and warning window really are configurable rather than hardcoded.
 
 Both scripts exit non-zero on failure, so they belong in CI.
 
+## Running locally on Windows without Docker or PostgreSQL installed
+
+If you have neither Docker nor a PostgreSQL install, a portable PostgreSQL 16
+server is included under `tools/`. It is a real PostgreSQL build, so Prisma
+migrations and the seed behave exactly as they would in production.
+
+**First time only** — start the database (it must be running before the API):
+
+```powershell
+# One-time: initialise the data cluster
+.\tools\pgsql\bin\initdb.exe -D .\tools\pgdata -U postgres -A trust -E UTF8 --locale=C
+
+# Start it (leave the window open, or run it detached)
+.\tools\pgsql\bin\pg_ctl.exe -D .\tools\pgdata -l .\tools\pg.log -o "-p 5432 -h 127.0.0.1" start
+
+# Create the database once
+.\tools\pgsql\bin\psql.exe -h 127.0.0.1 -p 5432 -U postgres -c "CREATE DATABASE owneradmin;"
+```
+
+`.env` is already pointed at this instance:
+
+```env
+DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5432/owneradmin?schema=public
+```
+
+**Then the normal workflow:**
+
+```powershell
+cd backend
+npx prisma migrate dev --name init
+npm run keygen          # only once; refuses to overwrite an existing key
+npm run prisma:seed
+npm run start:dev       # http://localhost:4000/api/v1
+
+cd ../frontend
+npm run dev             # http://localhost:5173
+```
+
+**Stop the database when finished:**
+
+```powershell
+.\tools\pgsql\bin\pg_ctl.exe -D .\tools\pgdata stop
+```
+
+The binaries, the data cluster and all logs are git-ignored — none of it can be
+committed by accident.
+
 ## Troubleshooting
 
 **`Invalid environment configuration`** — read the listed keys; each line names
