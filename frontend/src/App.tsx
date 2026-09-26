@@ -4,15 +4,22 @@ import { AdminLayout } from '@/layouts/admin-layout';
 import { ProtectedRoute } from '@/routes/protected-route';
 import { AuthProvider } from '@/hooks/use-auth';
 import { ToastProviderHost } from '@/hooks/use-toast';
-import { CustomersPage } from '@/pages/customers';
+import { AnalyticsPage } from '@/pages/analytics';
+import { AuditLogsPage } from '@/pages/audit-logs';
 import { CustomerDetailPage } from '@/pages/customer-detail';
+import { CustomersPage } from '@/pages/customers';
 import { DashboardPage } from '@/pages/dashboard';
-import { LicensesPage } from '@/pages/licenses';
+import { DevicesPage } from '@/pages/devices';
 import { LicenseDetailPage } from '@/pages/license-detail';
+import { LicensesPage } from '@/pages/licenses';
 import { LoginPage } from '@/pages/login';
 import { NotFoundPage } from '@/pages/not-found';
+import { PaymentsPage } from '@/pages/payments';
 import { PlansPage } from '@/pages/plans';
-import { PlaceholderPage } from '@/pages/placeholder';
+import { ReleasesPage } from '@/pages/releases';
+import { SettingsPage } from '@/pages/settings';
+import { SubscriptionsPage } from '@/pages/subscriptions';
+import { SupportPage } from '@/pages/support';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -48,19 +55,14 @@ export default function App() {
                   <Route path="plans" element={<PlansPage />} />
                   <Route path="licenses" element={<LicensesPage />} />
                   <Route path="licenses/:id" element={<LicenseDetailPage />} />
-
-                  {/* Phase 2 modules — routes wired, screens land next. */}
-                  <Route path="subscriptions" element={<PlaceholderPage title="الاشتراكات" phase="2" />} />
-                  <Route path="devices" element={<PlaceholderPage title="الأجهزة" phase="2" />} />
-                  <Route path="activations" element={<PlaceholderPage title="التفعيلات" phase="2" />} />
-                  <Route path="expirations" element={<PlaceholderPage title="انتهاء الصلاحية" phase="2" />} />
-                  <Route path="features" element={<PlaceholderPage title="الميزات" phase="2" />} />
-                  <Route path="payments" element={<PlaceholderPage title="المدفوعات" phase="2" />} />
-                  <Route path="support" element={<PlaceholderPage title="الدعم الفني" phase="2" />} />
-                  <Route path="releases" element={<PlaceholderPage title="الإصدارات" phase="2" />} />
-                  <Route path="analytics" element={<PlaceholderPage title="التقارير" phase="2" />} />
-                  <Route path="audit-logs" element={<PlaceholderPage title="سجل التدقيق" phase="2" />} />
-                  <Route path="settings" element={<PlaceholderPage title="الإعدادات" phase="2" />} />
+                  <Route path="subscriptions" element={<SubscriptionsPage />} />
+                  <Route path="devices" element={<DevicesPage />} />
+                  <Route path="payments" element={<PaymentsPage />} />
+                  <Route path="support" element={<SupportPage />} />
+                  <Route path="releases" element={<ReleasesPage />} />
+                  <Route path="analytics" element={<AnalyticsPage />} />
+                  <Route path="audit-logs" element={<AuditLogsPage />} />
+                  <Route path="settings" element={<SettingsPage />} />
                 </Route>
               </Route>
 

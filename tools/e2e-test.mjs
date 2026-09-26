@@ -132,19 +132,36 @@ async function main() {
   check('a new customer has no licences', customer.body?.stats?.activeLicenses === 0);
   check('a new customer has no payment history', Number(customer.body?.stats?.totalPaid) === 0);
 
-  // ---- 4. Licence issuance ----------------------------------------------
-  console.log('\n[4] Licence issuance');
+  // ---- 4. Subscription --------------------------------------------------
+  console.log('\n[4] Subscription');
 
-  const licence = await call('POST', '/licenses', { customerId, planId: plan.id, maxDevices: 2, notes: 'e2e run' });
+  const subscription = await call('POST', '/subscriptions', {
+    customerId, planId: plan.id, price: 49900, currency: 'EGP', billingInterval: 'YEARLY',
+  });
+  check('subscription created (201)', subscription.status === 201,
+    `status ${subscription.status}: ${JSON.stringify(subscription.body).slice(0, 200)}`);
+  const subscriptionId = subscription.body?.id;
+  check('the expiry derives from the YEARLY interval', Boolean(subscription.body?.expiresAt));
+  check('it starts ACTIVE', subscription.body?.status === 'ACTIVE', subscription.body?.status);
+  check('it carries the plan entitlements', subscription.body?.featureKeys?.length === 7);
+
+  // ---- 5. Licence issuance ----------------------------------------------
+  console.log('\n[5] Licence issuance');
+
+  const licence = await call('POST', '/licenses', {
+    customerId, planId: plan.id, subscriptionId, maxDevices: 2, notes: 'e2e run',
+  });
   check('licence issued (201)', licence.status === 201, `got ${licence.status}`);
   const licenceId = licence.body?.id;
   const licenceKey = licence.body?.licenseKey;
 
   check('a formatted key was generated', /^PROD(-[A-Z0-9]{4}){4}$/.test(licenceKey ?? ''), licenceKey);
   check('the new licence is ACTIVE', licence.body?.derivedStatus === 'ACTIVE', licence.body?.derivedStatus);
-  check('the expiry is derived from the plan interval', Boolean(licence.body?.expiresAt));
   check('the device limit is honoured (2)', licence.body?.maxDevices === 2, `got ${licence.body?.maxDevices}`);
-  check('no device is registered yet', licence.body?.activeDevices === 0);
+  check('it is bound to the subscription', licence.body?.subscriptionId === subscriptionId);
+  check('the licence expiry matches the subscription',
+    licence.body?.expiresAt === subscription.body?.expiresAt,
+    `${licence.body?.expiresAt} vs ${subscription.body?.expiresAt}`);
 
   const payload = await call('GET', `/licenses/${licenceId}/payload`);
   check('a signed payload is available', payload.status === 200 && Boolean(payload.body?.signature));
@@ -157,8 +174,8 @@ async function main() {
   check('key lookup is case-insensitive', lookup.status === 200 && lookup.body?.id === licenceId);
 
 
-  // ---- 5. Public validation (the customer app's endpoint) ----------------
-  console.log('\n[5] Public licence validation');
+  // ---- 6. Public validation (the customer app's endpoint) ----------------
+  console.log('\n[6] Public licence validation');
 
   const device = 'e2e-machine-alpha';
   const v1 = await call('POST', '/validations/validate',
@@ -191,8 +208,8 @@ async function main() {
   check('an unknown key still returns 200 so the client gets a verdict',
     unknown.status === 200, `got ${unknown.status}`);
 
-  // ---- 6. Renewal --------------------------------------------------------
-  console.log('\n[6] Renewal');
+  // ---- 7. Renewal --------------------------------------------------------
+  console.log('\n[7] Renewal');
 
   const beforeExpiry = (await call('GET', `/licenses/${licenceId}`)).body?.expiresAt;
   const renew = await call('POST', `/licenses/${licenceId}/renew`, { billingInterval: 'YEARLY', periods: 1 });
@@ -204,8 +221,8 @@ async function main() {
   check('the licence stays active after renewal',
     (await call('GET', `/licenses/${licenceId}`)).body?.derivedStatus === 'ACTIVE');
 
-  // ---- 7. Suspend / reactivate -------------------------------------------
-  console.log('\n[7] Suspend and reactivate');
+  // ---- 8. Suspend / reactivate -------------------------------------------
+  console.log('\n[8] Suspend and reactivate');
 
   const suspend = await call('POST', `/licenses/${licenceId}/suspend`, { reason: 'e2e test' });
   check('suspension succeeds', suspend.status === 201 || suspend.status === 200, `got ${suspend.status}`);
@@ -221,8 +238,8 @@ async function main() {
   check('the licence is active again', reactivate.body?.derivedStatus === 'ACTIVE');
 
 
-  // ---- 8. Revoke is terminal ---------------------------------------------
-  console.log('\n[8] Revoke (terminal)');
+  // ---- 9. Revoke is terminal ---------------------------------------------
+  console.log('\n[9] Revoke (terminal)');
 
   const revoke = await call('POST', `/licenses/${licenceId}/revoke`, { reason: 'e2e cleanup' });
   check('revocation succeeds', revoke.status === 201 || revoke.status === 200, `got ${revoke.status}`);
@@ -259,27 +276,160 @@ async function main() {
   check('customer creation is audited',
     (cAudit.body?.data ?? []).some((a) => a.action === 'customer.created'));
 
-  // ---- 10. Analytics reflect real data -----------------------------------
-  console.log('\n[10] Analytics');
+  // ---- 10. Payments ------------------------------------------------------
+  console.log('\n[10] Payments');
+
+  const reference = `E2E-TXN-${stamp}`;
+  const payment = await call('POST', '/payments', {
+    customerId, subscriptionId, amount: 49900, currency: 'EGP',
+    method: 'BANK_TRANSFER', transactionReference: reference,
+  });
+  check('payment recorded (201)', payment.status === 201,
+    `status ${payment.status}: ${JSON.stringify(payment.body).slice(0, 200)}`);
+  const paymentId = payment.body?.id;
+  check('it starts PENDING', payment.body?.status === 'PENDING', payment.body?.status);
+
+  const dupe = await call('POST', '/payments', { customerId, amount: 1000, transactionReference: reference });
+  check('a duplicate transaction reference is rejected (409)', dupe.status === 409, `got ${dupe.status}`);
+
+  const crossCustomer = await call('POST', '/payments', { customerId: 999999, subscriptionId, amount: 1000 });
+  check('a payment for a missing customer fails', crossCustomer.status >= 400);
+
+  const expiryBefore = (await call('GET', `/subscriptions/${subscriptionId}`)).body?.expiresAt;
+  const verified = await call('POST', `/payments/${paymentId}/verify`, { renewSubscription: true });
+  check('payment verified', verified.status === 200, `got ${verified.status}`);
+  check('it becomes PAID', verified.body?.status === 'PAID', verified.body?.status);
+
+  const expiryAfter = (await call('GET', `/subscriptions/${subscriptionId}`)).body?.expiresAt;
+  check('verifying with renewal extended the subscription',
+    new Date(expiryAfter) > new Date(expiryBefore), `${expiryBefore} -> ${expiryAfter}`);
+
+  const editPaid = await call('PUT', `/payments/${paymentId}`, { amount: 1 });
+  check('a verified payment CANNOT be edited (409)', editPaid.status === 409, `got ${editPaid.status}`);
+
+  const reVerify = await call('POST', `/payments/${paymentId}/verify`, {});
+  check('it cannot be verified twice (409)', reVerify.status === 409, `got ${reVerify.status}`);
+
+  const overRefund = await call('POST', `/payments/${paymentId}/refund`, {
+    amount: 999999, reason: 'over-refund attempt',
+  });
+  check('refunding more than was paid is rejected (400)', overRefund.status === 400, `got ${overRefund.status}`);
+
+  const partial = await call('POST', `/payments/${paymentId}/refund`, { amount: 9900, reason: 'partial' });
+  check('a partial refund succeeds', partial.status === 200, `got ${partial.status}`);
+  check('it stays PAID while partly refunded', partial.body?.status === 'PAID', partial.body?.status);
+  check('the refunded amount is recorded, not overwritten',
+    partial.body?.refundedAmount === 9900, `got ${partial.body?.refundedAmount}`);
+
+  const paymentActions = ((await call('GET', `/audit-logs/entity/PAYMENT/${paymentId}`)).body?.data ?? [])
+    .map((a) => a.action);
+  check('payment verification is audited', paymentActions.includes('payment.verified'));
+  check('the refund is audited', paymentActions.includes('payment.refunded'));
+
+  // ---- 11. Subscription / licence consistency ---------------------------
+  // A second, independent subscription is used here on purpose: the licence
+  // from earlier in the run has been REVOKED, and a revoked licence is
+  // deliberately excluded from renewal, so it must NOT be expected to match
+  // its subscription any more.
+  console.log('\n[11] Subscription and licence stay in sync');
+
+  const subB = await call('POST', '/subscriptions', {
+    customerId, planId: plan.id, price: 49900, currency: 'EGP', billingInterval: 'YEARLY',
+  });
+  check('a second subscription is created', subB.status === 201, `got ${subB.status}`);
+  const subBId = subB.body?.id;
+
+  const licB = await call('POST', '/licenses', { customerId, planId: plan.id, subscriptionId: subBId, maxDevices: 2 });
+  check('its licence is issued', licB.status === 201, `got ${licB.status}`);
+  check('the licence inherits the subscription expiry',
+    licB.body?.expiresAt === subB.body?.expiresAt,
+    `${licB.body?.expiresAt} vs ${subB.body?.expiresAt}`);
+
+  const beforeB = (await call('GET', `/subscriptions/${subBId}`)).body?.expiresAt;
+  await call('POST', `/subscriptions/${subBId}/renew`, { periods: 1 });
+  const afterB = (await call('GET', `/subscriptions/${subBId}`)).body?.expiresAt;
+  const licBAfter = (await call('GET', `/licenses/${licB.body?.id}`)).body?.expiresAt;
+  check('renewing the subscription pushes the new date to its licence',
+    licBAfter === afterB, `${licBAfter} vs ${afterB}`);
+  check('the renewal actually moved the date', new Date(afterB) > new Date(beforeB));
+
+  const subBSuspend = await call('POST', `/subscriptions/${subBId}/suspend`, { reason: 'e2e' });
+  check('the subscription suspends', subBSuspend.status === 201 || subBSuspend.status === 200,
+    `got ${subBSuspend.status}`);
+  check('its licence is suspended too',
+    (await call('GET', `/licenses/${licB.body?.id}`)).body?.derivedStatus === 'SUSPENDED');
+
+  const subBReactivate = await call('POST', `/subscriptions/${subBId}/reactivate`, { reason: 'e2e' });
+  check('the subscription reactivates', subBReactivate.status === 201 || subBReactivate.status === 200,
+    `got ${subBReactivate.status}`);
+  check('its licence is active again',
+    (await call('GET', `/licenses/${licB.body?.id}`)).body?.derivedStatus === 'ACTIVE');
+
+  const subBAudit = ((await call('GET', `/audit-logs/entity/SUBSCRIPTION/${subBId}`)).body?.data ?? [])
+    .map((a) => a.action);
+  check('the subscription renewal is audited', subBAudit.includes('subscription.renewed'));
+  check('the suspension is audited', subBAudit.includes('subscription.suspended'));
+  check('the reactivation is audited', subBAudit.includes('subscription.reactivated'));
+
+  // ---- 12. Devices, support, releases -----------------------------------
+  console.log('\n[12] Devices, support and releases');
+
+  const devices = await call('GET', '/devices');
+  check('devices are listed', devices.status === 200);
+  check('fingerprint hashes are never exposed in full',
+    (devices.body?.data ?? []).every((d) => (d.deviceFingerprint ?? '').length <= 12));
+  check('device utilisation is computed',
+    (await call('GET', '/devices/utilisation')).status === 200);
+
+  const ticket = await call('POST', '/support', {
+    customerId, subject: 'E2E ticket', message: 'Please help', priority: 'HIGH',
+  });
+  check('support ticket opened (201)', ticket.status === 201, `got ${ticket.status}`);
+  check('it gets a sequential number', /^TKT-\d{4}-\d{6}$/.test(ticket.body?.number ?? ''), ticket.body?.number);
+  check('an internal note can be added',
+    (await call('POST', `/support/${ticket.body?.id}/reply`, { body: 'Looking', type: 'INTERNAL_NOTE' })).status === 200);
+
+  const version = await call('POST', '/releases', {
+    version: '1.0.0', buildNumber: stamp % 100000, platform: 'WINDOWS',
+    downloadUrl: 'https://example.com/a.exe',
+  });
+  check('release draft created (201)', version.status === 201,
+    `status ${version.status}: ${JSON.stringify(version.body).slice(0, 160)}`);
+  check('a new release starts as DRAFT', version.body?.status === 'DRAFT', version.body?.status);
+  check('a duplicate version/build is rejected',
+    (await call('POST', '/releases', {
+      version: '1.0.0', buildNumber: stamp % 100000, platform: 'WINDOWS',
+    })).status >= 400);
+
+  const published = await call('POST', `/releases/${version.body?.id}/publish`, {});
+  check('the release publishes', published.status === 200, `got ${published.status}`);
+  check('it becomes PUBLISHED', published.body?.status === 'PUBLISHED', published.body?.status);
+  check('the customer app can read a published build',
+    (await call('GET', '/releases/latest?platform=WINDOWS')).body?.data?.version === '1.0.0');
+
+  // ---- 13. Analytics ----------------------------------------------------
+  console.log('\n[13] Analytics');
 
   const overview = await call('GET', '/analytics/overview');
   check('the overview is served', overview.status === 200);
   check('it counts the real customer total', overview.body?.customers?.total >= 1);
   check('it reports a currency', typeof overview.body?.currency === 'string');
   check('the expiration report is served', (await call('GET', '/licenses/expiring?filter=30d')).status === 200);
+  check('the payment summary reflects the verified payment',
+    (await call('GET', '/payments/summary')).body?.monthCount >= 1);
 
-  // ---- 11. Input validation ----------------------------------------------
-  console.log('\n[11] Input validation');
+  // ---- 14. Input validation ---------------------------------------------
+  console.log('\n[14] Input validation');
 
-  const badEmail = await call('POST', '/customers', { name: 'X', email: 'not-an-email' });
-  check('an invalid email is rejected (400)', badEmail.status === 400, `got ${badEmail.status}`);
-
-  const massAssign = await call('POST', '/customers', { name: 'MassAssign', email: `ma-${stamp}@test.local`, id: 999 });
+  check('an invalid email is rejected (400)',
+    (await call('POST', '/customers', { name: 'X', email: 'not-an-email' })).status === 400);
   check('an unknown field is rejected (mass-assignment guard)',
-    massAssign.status === 400, `got ${massAssign.status}`);
+    (await call('POST', '/customers', { name: 'MA', email: `ma-${stamp}@test.local`, id: 999 })).status === 400);
+  check('issuing against a missing customer fails',
+    (await call('POST', '/licenses', { customerId: 999999, planId: 1 })).status >= 400);
+  check('a negative payment is rejected (400)',
+    (await call('POST', '/payments', { customerId, amount: -100 })).status === 400);
 
-  const missing = await call('POST', '/licenses', { customerId: 999999, planId: 1 });
-  check('issuing against a missing customer fails', missing.status >= 400, `got ${missing.status}`);
 
   console.log(`\n${'='.repeat(56)}`);
   console.log(`  ${passed} passed, ${failed} failed`);

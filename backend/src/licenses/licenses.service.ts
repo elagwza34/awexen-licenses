@@ -169,12 +169,30 @@ export class LicensesService {
       subscriptionId = active?.id ?? null;
     }
 
+    const subscription = subscriptionId
+      ? await this.prisma.subscription.findUnique({ where: { id: subscriptionId } })
+      : null;
+
+    if (subscription && subscription.planId !== dto.planId) {
+      throw new ConflictException('The subscription is on a different plan');
+    }
+
     const startsAt = dto.startsAt ? new Date(dto.startsAt) : new Date();
-    // Default the expiry from the plan billing interval so the dates are
-    // consistent by construction (no hand-edited, mismatched dates).
-    const expiresAt = dto.expiresAt ? new Date(dto.expiresAt) : this.addInterval(startsAt, plan.billingInterval);
+
+    // Precedence: an explicit date wins, then the bound subscription's expiry
+    // (so a licence never disagrees with the thing it is paid through), and
+    // only then the plan billing interval.
+    let expiresAt: Date | null;
+    if (dto.expiresAt) {
+      expiresAt = new Date(dto.expiresAt);
+    } else if (subscription?.expiresAt) {
+      expiresAt = subscription.expiresAt;
+    } else {
+      expiresAt = this.addInterval(startsAt, plan.billingInterval);
+    }
+
     const maxDevices = dto.maxDevices ?? plan.maxDevices;
-    const isTrial = dto.isTrial ?? plan.isTrialPlan;
+    const isTrial = dto.isTrial ?? plan.isTrialPlan ?? false;
 
     const license = await this.prisma.$transaction(async (tx) => {
       const created = await tx.license.create({
