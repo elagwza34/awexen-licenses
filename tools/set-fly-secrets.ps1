@@ -3,7 +3,7 @@
   Generates production secrets and uploads them to the Fly.io app.
 
 .DESCRIPTION
-  Secrets are generated in memory and handed straight to `flyctl secrets set`.
+  Secrets are generated in memory and handed straight to `flyctl secrets import`.
   Nothing is written to disk by this script, and no secret is ever echoed to the
   console — a shell history or a screenshot must not be able to leak them.
 
