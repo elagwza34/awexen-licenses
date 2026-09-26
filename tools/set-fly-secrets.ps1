@@ -5,7 +5,7 @@
 .DESCRIPTION
   Secrets are generated in memory and handed straight to `flyctl secrets import`.
   Nothing is written to disk by this script, and no secret is ever echoed to the
-  console — a shell history or a screenshot must not be able to leak them.
+  console - a shell history or a screenshot must not be able to leak them.
 
   The license signing private key is read from disk (it must survive restarts
   and re-deploys) and uploaded as the LICENSE_PRIVATE_KEY_PEM secret. The
@@ -30,7 +30,8 @@ param(
   [Parameter(Mandatory = $true)][string]$App,
   [Parameter(Mandatory = $true)][string]$DatabaseUrl,
   [Parameter(Mandatory = $true)][string]$AdminEmail,
-  [string]$PrivateKeyPath = (Join-Path $PSScriptRoot '..\backend\keys\license-private.pem')
+  [string]$PrivateKeyPath = (Join-Path $PSScriptRoot '..\backend\keys\license-private.pem'),
+  [string]$SecretsFile = (Join-Path $PSScriptRoot '..\.deploy-secrets.local')
 )
 
 $ErrorActionPreference = 'Stop'
@@ -44,21 +45,33 @@ if (-not (Test-Path $PrivateKeyPath)) {
 }
 
 # The key must be a real PEM block. Uploading a truncated file would produce an
-# app that boots but can never sign a license — a silent, expensive failure.
+# app that boots but can never sign a license - a silent, expensive failure.
 $privateKey = (Get-Content -LiteralPath $PrivateKeyPath -Raw).Trim()
 if ($privateKey -notmatch '-----BEGIN (RSA )?PRIVATE KEY-----') {
   throw "The file at $PrivateKeyPath does not look like a PEM private key."
 }
 
-# 64 random bytes, base64-encoded: comfortably above the 32-character minimum the
-# app enforces, and long enough that guessing is impossible.
-$jwtSecret = [Convert]::ToBase64String([Security.Cryptography.RandomNumberGenerator]::GetBytes(64))
-$pepper = [Convert]::ToBase64String([Security.Cryptography.RandomNumberGenerator]::GetBytes(48))
+# The pepper and the admin password are REUSED from prepare-neon.ps1, never
+# regenerated here. The database already stores a hash of the admin password
+# produced with that pepper; uploading a different one would make the owner
+# account permanently unable to sign in.
+if (-not (Test-Path $SecretsFile)) {
+  throw "Secrets file not found: $SecretsFile. Run tools\prepare-neon.ps1 first."
+}
+$stored = @{}
+Get-Content -LiteralPath $SecretsFile | ForEach-Object {
+  if ($_ -match '^\s*([A-Z_]+)=(.*)$') { $stored[$matches[1]] = $matches[2] }
+}
 
-# A long random password: the seed hashes it with Argon2, so it is never stored
-# in clear text. It is printed once, at the end, so it can be saved in a
-# password manager.
-$adminPassword = [Convert]::ToBase64String([Security.Cryptography.RandomNumberGenerator]::GetBytes(24))
+$pepper = $stored['PASSWORD_PEPPER']
+$adminPassword = $stored['SEED_ADMIN_PASSWORD']
+if (-not $pepper -or -not $adminPassword) {
+  throw "PASSWORD_PEPPER or SEED_ADMIN_PASSWORD missing from $SecretsFile."
+}
+
+# The JWT secret is not used to hash anything already stored, so a fresh one is
+# correct here.
+$jwtSecret = [Convert]::ToBase64String([Security.Cryptography.RandomNumberGenerator]::GetBytes(64))
 
 Write-Host "Uploading secrets to Fly app '$App'..." -ForegroundColor Cyan
 
@@ -92,9 +105,8 @@ try {
 }
 
 Write-Host ''
-Write-Host 'Done. The first SUPER_ADMIN credentials are:' -ForegroundColor Green
-Write-Host "  email:    $AdminEmail"
-Write-Host "  password: $adminPassword"
+Write-Host 'Done. The first SUPER_ADMIN credentials are in:' -ForegroundColor Green
+Write-Host "  $SecretsFile" -ForegroundColor Green
 Write-Host ''
-Write-Host 'Store that password in a password manager now — it is not saved' -ForegroundColor Yellow
-Write-Host 'anywhere else and cannot be recovered.' -ForegroundColor Yellow
+Write-Host 'Open that file, store the password in a password manager, then delete' -ForegroundColor Yellow
+Write-Host 'the file. It is not saved anywhere else.' -ForegroundColor Yellow
