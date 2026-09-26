@@ -37,7 +37,14 @@ export class JwtAuthGuard {
 
     let payload: JwtPayload;
     try {
-      payload = await this.jwtService.verifyAsync<JwtPayload>(token);
+      // The audience is pinned, not just the signature. Admin and customer
+      // tokens are signed with the same secret, so without this a customer
+      // portal token would pass the `typ` check below and open the panel that
+      // issues licences for every customer.
+      payload = await this.jwtService.verifyAsync<JwtPayload>(token, {
+        audience: 'owner-admin',
+        issuer: 'awexen',
+      });
     } catch (error) {
       const expired = error instanceof Error && error.name === 'TokenExpiredError';
       throw new UnauthorizedException(expired ? 'Access token expired' : 'Invalid access token');

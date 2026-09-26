@@ -415,6 +415,24 @@ model Customer {
   notes     String?
   status    CustomerStatus @default(ACTIVE)
 
+  // ---------------------------------------------------------------------------
+  // Customer portal sign-in.
+  //
+  // The customer signs up on pms.awexen.com to reach their dashboard. This is
+  // deliberately separate from the Admin login: an admin token must never open
+  // the customer portal, and the two roles carry different permissions.
+  //
+  // NULL means "no portal account". The owner can still create customers by
+  // hand from the panel without ever issuing credentials, which is why this is
+  // not simply a NOT NULL column with an empty default.
+  passwordHash  String?  @map("password_hash")
+  lastLoginAt   DateTime? @map("last_login_at")
+  /// Set by the owner once payment is confirmed. Until then the customer can
+  /// sign in and see their dashboard but the download endpoint refuses.
+  downloadEnabled Boolean @default(false) @map("download_enabled")
+  /// Reference for support, e.g. "whatsapp: +20…, received 2026-09-26".
+  paymentReference String? @map("payment_reference") @db.VarChar(200)
+
   subscriptions Subscription[]
   licenses      License[]
   payments      Payment[]

@@ -12,6 +12,7 @@ import { AuditLogsModule } from './audit/audit-logs.module';
 import { AuthModule } from './auth/auth.module';
 import { AuditModule } from './common/audit/audit.module';
 import { CryptoModule } from './common/crypto/crypto.module';
+import { CustomerPortalModule } from './customer-portal/customer-portal.module';
 import { HealthController } from './common/health.controller';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { PermissionsGuard } from './common/guards/permissions.guard';
@@ -88,6 +89,7 @@ if (ENV_FILES.length === 0) {
     DevicesModule,
     SupportModule,
     ReleasesModule,
+    CustomerPortalModule,
   ],
   controllers: [HealthController],
   providers: [

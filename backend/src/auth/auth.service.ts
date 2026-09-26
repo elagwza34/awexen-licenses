@@ -383,7 +383,13 @@ export class AuthService {
     familyId?: string,
   ): Promise<AuthTokensDto> {
     const payload: JwtPayload = { sub: adminId, email, name, roles, perms: permissions, typ: 'access' };
-    const accessToken = await this.jwt.signAsync(payload);
+    // The audience pins this token to the admin panel. Customer portal tokens
+    // are signed with the same secret, and JwtAuthGuard verifies that audience,
+    // so a portal token cannot be replayed here to reach the licence controls.
+    const accessToken = await this.jwt.signAsync(payload, {
+      audience: 'owner-admin',
+      issuer: 'awexen',
+    });
 
     const refreshToken = this.security.createOpaqueToken();
     const ttlDays = Number(this.config.get('JWT_REFRESH_TTL_DAYS', 30));
