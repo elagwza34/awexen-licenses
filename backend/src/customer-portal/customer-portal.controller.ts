@@ -38,7 +38,13 @@ export class CustomerPortalController {
     return this.portal.login(dto, req);
   }
 
+  // The @Public() on the guarded routes below is load-bearing. The global
+  // JwtAuthGuard runs before any route-level guard, so without it an admin
+  // token is demanded first and the portal's own guard never runs — every
+  // signed-in customer would get 401. @Public() makes the global guard stand
+  // down, and CustomerJwtGuard then does the real check.
   @Get('me')
+  @Public()
   @UseGuards(CustomerJwtGuard)
   @ApiOperation({ summary: 'The signed-in customer' })
   me(@CurrentCustomer() customer: { id: number }) {
@@ -46,6 +52,7 @@ export class CustomerPortalController {
   }
 
   @Get('overview')
+  @Public()
   @UseGuards(CustomerJwtGuard)
   @ApiOperation({ summary: 'Dashboard data: licences, devices, latest release' })
   overview(@CurrentCustomer() customer: { id: number }) {
@@ -53,6 +60,7 @@ export class CustomerPortalController {
   }
 
   @Get('licenses')
+  @Public()
   @UseGuards(CustomerJwtGuard)
   @ApiOperation({
     summary: 'Full licence keys for this customer',
@@ -65,6 +73,7 @@ export class CustomerPortalController {
   }
 
   @Get('download')
+  @Public()
   @UseGuards(CustomerJwtGuard)
   @ApiOperation({
     summary: 'Resolve the installer download',
