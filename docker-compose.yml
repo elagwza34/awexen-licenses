@@ -47,13 +47,24 @@ services:
     restart: unless-stopped
     depends_on:
       - backend
+    environment:
+      # Substituted into nginx.conf at start; see the command below.
+      SERVER_NAME: ${SERVER_NAME:-admin.example.com}
     volumes:
-      - ./infra/nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      # The config is mounted read-only and copied to a writable path so the
+      # substitution does not modify the file on the host.
+      - ./infra/nginx/nginx.conf:/etc/nginx/templates/nginx.conf.template:ro
       - ./infra/nginx/certs:/etc/nginx/certs:ro
     ports:
       - "80:80"
       - "443:443"
     profiles: ["app"]
+    # The stock image has no envsubst; sed is enough because the config has one
+    # variable. `envsubst` would need a second image layer for nothing.
+    command: >
+      sh -c "sed -e 's/\$${SERVER_NAME}/$${SERVER_NAME}/g'
+      /etc/nginx/templates/nginx.conf.template > /etc/nginx/conf.d/default.conf
+      && nginx -g 'daemon off;'"
 
   backend:
     build:

@@ -54,6 +54,11 @@ class EnvSchema {
   @IsString()
   CORS_ORIGINS: string = 'http://localhost:5173';
 
+  /// Public hostname, e.g. `admin.example.com`. Nginx substitutes it into
+  /// `server_name` at container start; production refuses to boot without it.
+  @IsString()
+  SERVER_NAME: string = 'admin.example.com';
+
   @Transform(({ value }) => value === true || value === 'true')
   @IsBoolean()
   TRUST_PROXY: boolean = false;
@@ -79,6 +84,9 @@ export function validateEnv(config: Record<string, unknown>): EnvSchema {
     }
     if (!config.CORS_ORIGINS || config.CORS_ORIGINS === 'http://localhost:5173') {
       errors.push('CORS_ORIGINS must list the real frontend origins in production');
+    }
+    if (!config.SERVER_NAME || config.SERVER_NAME === 'admin.example.com') {
+      errors.push('SERVER_NAME must be the real hostname in production');
     }
   }
 
