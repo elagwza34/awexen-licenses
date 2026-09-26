@@ -22,7 +22,16 @@ COPY src ./src
 RUN npm run build
 
 # Drop dev dependencies from the runtime image.
+#
+# This must come BEFORE `prisma generate`: pruning deletes the Prisma engine
+# binaries that were downloaded into node_modules/.prisma, so a client
+# generated beforehand is left without its query engine and the app dies at boot
+# with "Unable to find the Prisma engine ... did you initialize it properly?".
 RUN npm prune --omit=dev
+
+# Regenerate the client now that the tree is final, so the engine binaries this
+# pulls down survive into the runtime image.
+RUN npx prisma generate
 
 # ---------- Runtime ----------
 FROM node:${NODE_VERSION}-alpine AS runtime

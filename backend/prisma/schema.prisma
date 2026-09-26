@@ -11,6 +11,12 @@
 
 generator client {
   provider = "prisma-client-js"
+  // The client is generated inside the Docker build (linux) but the engine
+  // must match the runtime exactly. Without this, `prisma generate` resolves the
+  // host platform instead of musl and the container dies with
+  // 'could not locate the Query Engine for runtime "linux-musl-openssl-3.0.x"'.
+  // "native" keeps local (Windows/macOS) development working.
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x", "debian-openssl-3.0.x"]
 }
 
 datasource db {
