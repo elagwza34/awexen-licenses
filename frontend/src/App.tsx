@@ -15,6 +15,7 @@ import { ExpirationsPage } from '@/pages/expirations';
 import { FeaturesPage } from '@/pages/features';
 import { LicenseDetailPage } from '@/pages/license-detail';
 import { LicensesPage } from '@/pages/licenses';
+import { CustomerRegisterPage } from '@/pages/customer-register';
 import { LoginPage } from '@/pages/login';
 import { NotFoundPage } from '@/pages/not-found';
 import { PaymentsPage } from '@/pages/payments';
@@ -48,6 +49,11 @@ export default function App() {
         <AuthProvider>
           <BrowserRouter>
             <Routes>
+              {/* Customer self-service. Public by design: this is how a
+                  customer creates the account the owner then finds in the
+                  panel. The download itself stays behind the payment gate. */}
+              <Route path="/portal/register" element={<CustomerRegisterPage />} />
+
               <Route path="/login" element={<LoginPage />} />
 
               <Route element={<ProtectedRoute />}>
