@@ -81,10 +81,13 @@ services:
         condition: service_healthy
     volumes:
       # Private signing key is mounted read-only, never baked into the image
-      - ../keys:/app/keys:ro
+      - ./backend/keys:/app/keys:ro
     expose:
       - "4000"
     profiles: ["app"]
+    # The image no longer runs migrations on start (Fly runs them in the release
+    # command), so local development asks for them explicitly.
+    command: ["sh", "-c", "npx prisma migrate deploy && node dist/main.js"]
     # Safe to scale to N replicas: the maintenance jobs elect a single leader
     # through a Postgres advisory lock, so only one instance runs them. Every
     # replica still serves API traffic. See docs/ARCHITECTURE.md.

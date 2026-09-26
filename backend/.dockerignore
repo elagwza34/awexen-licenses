@@ -1,0 +1,35 @@
+# Fly.io sends this directory as the build context. Everything listed here is
+# therefore uploaded to Fly's builders — anything excluded can never end up in
+# an image layer or in Fly's build cache.
+
+# The license signing private key lives here. It is NEVER allowed into the
+# build context; production injects it as a secret at start-up instead.
+keys/
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Real configuration must never be uploaded.
+.env
+.env.*
+!.env.example
+
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+
+# Local noise
+*.log
+*.err
+run.txt
+e2e-out.txt
+
+# Not part of the runtime image
+test/
+.git/
+.gitignore
+Dockerfile
+fly.toml
+.dockerignore

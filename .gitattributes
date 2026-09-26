@@ -1,0 +1,19 @@
+# The container entrypoint runs under Alpine's /bin/sh, which chokes on CRLF
+# line endings. Normalising here is the only reliable place to enforce it,
+# because the editor that writes the file may be on Windows.
+* text=auto eol=lf
+
+*.sh text eol=lf
+Dockerfile text eol=lf
+*.ps1 text eol=crlf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Binary assets that must never be line-ending translated.
+*.png binary
+*.jpg binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+*.zip binary
+*.exe binary

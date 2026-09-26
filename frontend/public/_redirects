@@ -1,0 +1,6 @@
+# Cloudflare Pages SPA fallback.
+# The panel uses client-side routing, so a hard refresh on /licenses/xyz would
+# otherwise 404. One catch-all rewrite serves index.html and lets React Router
+# resolve the path. Hashed assets under /assets are matched first by Pages'
+# static asset handler and never reach this rule.
+/*    /index.html   200

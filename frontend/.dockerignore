@@ -1,0 +1,22 @@
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+
+# Real configuration must never be uploaded to the build context.
+.env
+.env.*
+!.env.example
+
+*.log
+*.err
+run.txt
+e2e-out.txt
+
+# Not part of the runtime image
+test/
+.git/
+.gitignore
+Dockerfile
+fly.toml
+.dockerignore

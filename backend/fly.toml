@@ -1,0 +1,80 @@
+# Fly.io — production deployment of the Owner Admin API.
+#
+# Deploy from THIS directory (the build context is the folder holding this file):
+#   cd backend
+#   flyctl deploy
+#
+# Region: Frankfurt. The database is Neon (see docs/DEPLOY-FLY.md), so no Fly
+# Postgres is attached — the app only ever talks to DATABASE_URL.
+
+app = "owneradmin-api"
+primary_region = "fra"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  NODE_ENV = "production"
+  # Fly routes traffic to `internal_port`; the app listens on PORT.
+  PORT = "4000"
+  API_PREFIX = "api/v1"
+
+  # Public identity of the API. SERVER_NAME is also the host the panel expects.
+  SERVER_NAME = "api.awexen.com"
+  API_PUBLIC_URL = "https://api.awexen.com"
+  # The SPA is served from Cloudflare Pages on a different origin.
+  CORS_ORIGINS = "https://pms.awexen.com"
+  # Fly's proxy terminates TLS and sets X-Forwarded-*; without this every
+  # request looks like it came from the proxy itself and rate limiting breaks.
+  TRUST_PROXY = "true"
+
+  # Token lifetimes and license key format (not secret).
+  JWT_ACCESS_TTL = "15m"
+  JWT_REFRESH_TTL_DAYS = "30"
+  LICENSE_PRIVATE_KEY_PATH = "keys/license-private.pem"
+  LICENSE_PUBLIC_KEY_PATH = "keys/license-public.pem"
+  LICENSE_KEY_PREFIX = "PROD"
+  LICENSE_KEY_GROUPS = "4"
+  LICENSE_KEY_GROUP_LEN = "4"
+
+  # Defaults written into the `settings` table by the seed script.
+  DEFAULT_CURRENCY = "EGP"
+  DEFAULT_VALIDATION_INTERVAL_HOURS = "72"
+  DEFAULT_GRACE_PERIOD_DAYS = "7"
+  DEFAULT_TRIAL_DAYS = "14"
+  DEFAULT_MAX_DEVICES = "1"
+  DEFAULT_TIMEZONE = "Africa/Cairo"
+
+  # Migrations run ONCE per release, before any machine starts serving. Running
+  # them from the start command instead would let a rolling deploy apply the
+  # same migration from two machines at once.
+  [deploy]
+  release_command = "npx prisma migrate deploy"
+
+[http_service]
+  internal_port = 4000
+  force_https = true
+  processes = ["app"]
+
+  # The scheduler (hourly reconciliation, expiry notices) lives inside this
+  # process. If Fly is allowed to stop the machine the maintenance jobs silently
+  # stop running, so the app must stay up: no auto-stop, always one machine.
+  auto_stop_machines = "off"
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [[http_service.checks]]
+  grace_period = "45s"
+  interval = "15s"
+  method = "GET"
+  timeout = "5s"
+  path = "/api/v1/health"
+
+# Give the machine time to finish in-flight requests on deploy.
+kill_signal = "SIGINT"
+kill_timeout = "30s"
+
+[[vm]]
+  memory = "512mb"
+  cpu_kind = "shared"
+  cpus = 1

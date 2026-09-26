@@ -66,3 +66,8 @@ backend/api.log
 backend/api.err
 run.txt
 e2e-out.txt
+
+# Vite dev-server noise (was accidentally tracked)
+frontend/web.log
+frontend/web.err
+
