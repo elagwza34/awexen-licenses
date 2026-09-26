@@ -23,6 +23,7 @@
     "prisma:seed": "ts-node prisma/seed.ts",
     "keygen": "ts-node scripts/generate-signing-keys.ts",
     "verify": "ts-node scripts/verify-crypto.ts",
+    "verify:seed-credentials": "ts-node scripts/verify-seed-credentials.ts",
     "verify:business": "ts-node scripts/verify-business-rules.ts",
     "verify:all": "npm run verify && npm run verify:business"
   },

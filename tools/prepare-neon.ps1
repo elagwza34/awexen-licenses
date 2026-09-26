@@ -29,14 +29,19 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$ConnectionFile = (Join-Path $PSScriptRoot '..\.env.production.local.txt'),
+  [string]$ConnectionFile,
   [Parameter(Mandatory = $true)][string]$AdminEmail,
-  [string]$SecretsFile = (Join-Path $PSScriptRoot '..\.deploy-secrets.local')
+  [string]$SecretsFile
 )
 
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $backend = Join-Path $repoRoot 'backend'
+
+# $PSScriptRoot is still empty while param() defaults are being evaluated, so
+# the default paths are resolved here rather than inline above.
+if (-not $ConnectionFile) { $ConnectionFile = Join-Path $repoRoot '.env.production.local.txt' }
+if (-not $SecretsFile) { $SecretsFile = Join-Path $repoRoot '.deploy-secrets.local' }
 
 if (-not (Test-Path $ConnectionFile)) {
   throw "Connection file not found: $ConnectionFile"
@@ -79,10 +84,39 @@ if (-not (Test-Path $psql)) {
   throw "psql not found at $psql"
 }
 
+function Get-ConnParts([string]$url) {
+  # The Neon URL carries '&' in its query string, which PowerShell splits into
+  # extra arguments when psql is called positionally. Parsing it here and passing
+  # host/user/database as separate flags avoids that entirely, and keeps the
+  # password out of the argument list via PGPASSWORD.
+  $uri = [Uri]$url
+  $userInfo = $uri.UserInfo.Split(':', 2)
+  # A regex rather than System.Web.HttpUtility, which is not loaded in
+  # Windows PowerShell 5.1 without an extra Add-Type.
+  $sslMode = 'require'
+  if ($uri.Query -match 'sslmode=([^&]+)') { $sslMode = $Matches[1] }
+  # A postgres URL without an explicit port leaves [Uri].Port at -1.
+  $port = if ($uri.Port -gt 0) { $uri.Port } else { 5432 }
+  return @{
+    Host     = $uri.Host
+    Port     = $port
+    User     = [Uri]::UnescapeDataString($userInfo[0])
+    Password = if ($userInfo.Count -gt 1) { [Uri]::UnescapeDataString($userInfo[1]) } else { '' }
+    Database = $uri.AbsolutePath.Trim('/')
+    SslMode  = $sslMode
+  }
+}
+
 foreach ($pair in @(@{ Name = 'direct'; Url = $directUrl }, @{ Name = 'pooled'; Url = $pooledUrl })) {
   Write-Host "Testing $($pair.Name) connection..." -ForegroundColor Cyan
-  $out = & $psql $pair.Url -c 'select 1' 2>&1
-  if ($LASTEXITCODE -ne 0) {
+  $c = Get-ConnParts $pair.Url
+  $env:PGPASSWORD = $c.Password
+  $env:PGSSLMODE = $c.SslMode
+  $out = & $psql -h $c.Host -p $c.Port -U $c.User -d $c.Database -tA -c 'select 1' 2>&1
+  $code = $LASTEXITCODE
+  $env:PGPASSWORD = $null
+  $env:PGSSLMODE = $null
+  if ($code -ne 0) {
     # Echo the output with the password stripped before showing it.
     $safe = ($out | Out-String) -replace '://([^:]+):([^@]+)@', '://$1:****@'
     throw "The $($pair.Name) connection failed:`n$safe"
@@ -91,9 +125,23 @@ foreach ($pair in @(@{ Name = 'direct'; Url = $directUrl }, @{ Name = 'pooled'; 
 }
 
 # ---- 3. Generate the credentials once ----
-$pepper = [Convert]::ToBase64String([Security.Cryptography.RandomNumberGenerator]::GetBytes(48))
+# The static RandomNumberGenerator.GetBytes(int) overload only exists in .NET
+# Core. Windows PowerShell 5.1 runs on .NET Framework, where a fresh instance
+# with Create().GetBytes() is required.
+function New-RandomBytes([int]$count) {
+  $rng = [Security.Cryptography.RandomNumberGenerator]::Create()
+  try {
+    $buffer = New-Object byte[] $count
+    $rng.GetBytes($buffer)
+    return $buffer
+  } finally {
+    $rng.Dispose()
+  }
+}
+
+$pepper = [Convert]::ToBase64String((New-RandomBytes 48))
 # Satisfies the app's policy: 12+ chars, upper, lower, digit, symbol.
-$adminPassword = 'Adm-' + [Convert]::ToBase64String([Security.Cryptography.RandomNumberGenerator]::GetBytes(18)) + '!7'
+$adminPassword = 'Adm-' + [Convert]::ToBase64String((New-RandomBytes 18)) + '!7'
 
 if (Test-Path $SecretsFile) {
   throw "$SecretsFile already exists. Delete it first if you really mean to rotate these values."
@@ -129,6 +177,14 @@ try {
   Write-Host 'Seeding roles, plans, settings and the first SUPER_ADMIN...' -ForegroundColor Cyan
   npm run prisma:seed
   if ($LASTEXITCODE -ne 0) { throw 'prisma:seed failed.' }
+
+  # Prove the owner can actually sign in before anything is deployed. A seed
+  # that reports success while producing an unusable hash is silent otherwise.
+  Write-Host 'Verifying the seeded owner can authenticate...' -ForegroundColor Cyan
+  npm run verify:seed-credentials
+  if ($LASTEXITCODE -ne 0) {
+    throw 'The seeded owner cannot authenticate with these credentials. Not deploying.'
+  }
 } finally {
   Pop-Location
   # Never leave production credentials in the shell of this session.

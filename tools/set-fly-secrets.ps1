@@ -30,11 +30,17 @@ param(
   [Parameter(Mandatory = $true)][string]$App,
   [Parameter(Mandatory = $true)][string]$DatabaseUrl,
   [Parameter(Mandatory = $true)][string]$AdminEmail,
-  [string]$PrivateKeyPath = (Join-Path $PSScriptRoot '..\backend\keys\license-private.pem'),
-  [string]$SecretsFile = (Join-Path $PSScriptRoot '..\.deploy-secrets.local')
+  # $PSScriptRoot is not populated while param defaults are evaluated; these are
+  # resolved in the body instead.
+  [string]$PrivateKeyPath,
+  [string]$SecretsFile
 )
 
 $ErrorActionPreference = 'Stop'
+
+$repoRoot = Split-Path -Parent $PSScriptRoot
+if (-not $PrivateKeyPath) { $PrivateKeyPath = Join-Path $repoRoot 'backend\keys\license-private.pem' }
+if (-not $SecretsFile) { $SecretsFile = Join-Path $repoRoot '.deploy-secrets.local' }
 
 if (-not (Get-Command flyctl -ErrorAction SilentlyContinue)) {
   throw 'flyctl not found. Install it with: winget install --id Fly-io.flyctl -e'
@@ -70,8 +76,15 @@ if (-not $pepper -or -not $adminPassword) {
 }
 
 # The JWT secret is not used to hash anything already stored, so a fresh one is
-# correct here.
-$jwtSecret = [Convert]::ToBase64String([Security.Cryptography.RandomNumberGenerator]::GetBytes(64))
+# correct here. (Static GetBytes is .NET Core only; see prepare-neon.ps1.)
+$rng = [Security.Cryptography.RandomNumberGenerator]::Create()
+try {
+  $jwtBuffer = New-Object byte[] 64
+  $rng.GetBytes($jwtBuffer)
+} finally {
+  $rng.Dispose()
+}
+$jwtSecret = [Convert]::ToBase64String($jwtBuffer)
 
 Write-Host "Uploading secrets to Fly app '$App'..." -ForegroundColor Cyan
 
