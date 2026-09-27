@@ -1,5 +1,15 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsEmail, IsOptional, IsString, Length, Matches, MaxLength } from 'class-validator';
+import { Type } from 'class-transformer';
+import {
+  IsEmail,
+  IsInt,
+  IsOptional,
+  IsString,
+  Length,
+  Matches,
+  MaxLength,
+  Min,
+} from 'class-validator';
 
 export class CustomerRegisterDto {
   @ApiProperty({ example: 'buyer@company.com' })
@@ -59,4 +69,33 @@ export class CustomerLoginDto {
   // not as a validation error that gives away the password policy.
   @MaxLength(200)
   password!: string;
+}
+
+export class ActivationRequestDto {
+  @ApiProperty({ description: 'Plan the customer wants to activate.' })
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  planId!: number;
+
+  @ApiProperty({
+    description: 'Amount in piastres (100 piastres = 1 EGP), as shown on the plan.',
+  })
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  amount!: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  subscriptionId?: number;
+
+  @ApiPropertyOptional({ description: 'Bank reference, so the owner can match the transfer.' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  notes?: string;
 }

@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import { CheckCircle2, RefreshCw, Undo2 } from 'lucide-react';
+import { CheckCircle2, KeyRound, RefreshCw, Undo2 } from 'lucide-react';
+import { ReceiptLink } from '@/components/receipt-link';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { DataTable, type Column } from '@/components/data-table';
@@ -15,7 +16,7 @@ import { formatDate, formatMoney } from '@/lib/utils';
 import { useAuth } from '@/hooks/use-auth';
 import { useToast } from '@/hooks/use-toast';
 import { useConfirm } from '@/hooks/use-confirm';
-import type { Paginated, Payment, PaymentStatus } from '@/types';
+import type { Paginated, Payment, PaymentStatus, Plan } from '@/types';
 
 const PAGE_SIZE = 20;
 
@@ -43,6 +44,8 @@ export function PaymentsPage() {
   const [status, setStatus] = useState<PaymentStatus | ''>('');
   const [acting, setActing] = useState<string | null>(null);
   const [refunding, setRefunding] = useState<Payment | null>(null);
+  const [approving, setApproving] = useState<Payment | null>(null);
+  const [approvePlanId, setApprovePlanId] = useState<string>('');
   const [refundAmount, setRefundAmount] = useState('');
   const [refundReason, setRefundReason] = useState('');
 
@@ -80,8 +83,49 @@ export function PaymentsPage() {
     onError: (error) => toast.error('تعذّر الاسترداد', (error as ApiError).friendlyMessage),
   });
 
+  /**
+   * Approving an activation confirms the money and issues the licence in one
+   * step, so the reviewer does not have to open the customer, pick a plan and
+   * come back. The issued key is shown in a toast because it is the only moment
+   * the owner sees it in full here.
+   */
+  const approveActivation = useMutation({
+    mutationFn: ({ id, planId }: { id: number; planId?: number }) =>
+      api.post<{ message: string; license?: { licenseKey: string } | null }>(
+        `/payments/${id}/approve-activation`,
+        { planId },
+      ),
+    onMutate: ({ id }) => setActing(`approve-${id}`),
+    onSettled: () => setActing(null),
+    onSuccess: (result) => {
+      invalidate();
+      queryClient.invalidateQueries({ queryKey: ['licenses'] });
+      toast.success('تم اعتماد الطلب', result.message);
+      if (result.license) {
+        // The key is shown once, here, so the owner can hand it over without
+        // opening the licences screen.
+        window.prompt('كود التفعيل — انسخه للعميل:', result.license.licenseKey);
+      }
+      setApproving(null);
+    },
+    onError: (error) => {
+      const apiError = error as ApiError;
+      toast.error('تعذّر اعتماد الطلب', apiError.friendlyMessage);
+      setApproving(null);
+    },
+  });
+
   const canVerify = can('payments.verify');
   const canRefund = can('payments.refund');
+
+  // The plans are needed for the approval dialog: a portal request carries only
+  // an amount, so the owner has to say which tier was actually bought whenever
+  // the amount alone is ambiguous.
+  const plansQuery = useQuery({
+    queryKey: ['plans', 'picker'],
+    queryFn: () => api.get<{ data: Plan[] }>('/plans', { limit: 100 }),
+    enabled: canVerify,
+  });
 
   const query = useQuery({
     queryKey: ['payments', { page, search, status }],
@@ -131,9 +175,20 @@ export function PaymentsPage() {
       key: 'reference',
       header: 'المرجع',
       cell: (row) => (
-        <span className="ltr text-xs text-muted-foreground">
-          {row.transactionReference ?? '—'}
-        </span>
+        <div>
+          <span className="ltr text-xs text-muted-foreground">
+            {row.transactionReference ?? '—'}
+          </span>
+          {/* The receipt is the evidence. Showing it inline saves the reviewer a
+              download-and-open round trip before every decision. */}
+          {row.receiptUrl && (
+            <ReceiptLink
+              url={row.receiptUrl}
+              label="عرض الحوالة"
+              className="mt-1 inline-flex items-center gap-1 text-xs text-primary hover:underline"
+            />
+          )}
+        </div>
       ),
     },
     {
@@ -148,6 +203,21 @@ export function PaymentsPage() {
       header: 'إجراءات',
       cell: (row) => (
         <div className="flex gap-1.5">
+          {/* A request that carries a receipt came from the customer portal, so
+              one button confirms the money and issues the key in a single step. */}
+          {row.status === 'PENDING' && row.receiptUrl && canVerify && (
+            <Button
+              size="sm"
+              isLoading={acting === `approve-${row.id}`}
+              onClick={() => {
+                setApproving(row);
+                setApprovePlanId('');
+              }}
+            >
+              <KeyRound />
+              إصدار كود
+            </Button>
+          )}
           {row.status === 'PENDING' && canVerify && (
             <>
               <Button
@@ -245,6 +315,67 @@ export function PaymentsPage() {
               }
             }}
           >
+            {approving && (
+              <>
+                <p className="rounded-md bg-muted p-3 text-sm">
+                  المبلغ: <span className="font-semibold">{formatMoney(approving.amount, approving.currency)}</span>
+                  {approving.customer?.company || approving.customer?.name ? (
+                    <span className="ms-2 text-muted-foreground">
+                      — {approving.customer.company || approving.customer.name}
+                    </span>
+                  ) : null}
+                </p>
+
+                {approving.receiptUrl && (
+                  <ReceiptLink
+                    url={approving.receiptUrl}
+                    label="اعرض صورة الحوالة قبل الاعتماد"
+                    iconSize="size-4"
+                    className="flex items-center gap-1.5 text-sm text-primary hover:underline"
+                  />
+                )}
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="approve-plan">الباقة</Label>
+                  <select
+                    id="approve-plan"
+                    className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                    value={approvePlanId}
+                    onChange={(event) => setApprovePlanId(event.target.value)}
+                  >
+                    <option value="">تلقائي (مطابق للمبلغ)</option>
+                    {(plansQuery.data?.data ?? []).map((plan) => (
+                      <option key={plan.id} value={plan.id}>
+                        {plan.nameAr ?? plan.name} — {formatMoney(plan.price, plan.currency)}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-muted-foreground">
+                    يُختار تلقائياً عند مطابقة المبلغ لباقة واحدة. حدّده يدوياً إذا تطابقت أكثر من باقة.
+                  </p>
+                </div>
+
+                <DialogFooter>
+                  <Button type="button" variant="outline" onClick={() => setApproving(null)}>
+                    إلغاء
+                  </Button>
+                  <Button
+                    type="button"
+                    isLoading={approveActivation.isPending}
+                    onClick={() =>
+                      approveActivation.mutate({
+                        id: approving.id,
+                        planId: approvePlanId ? Number(approvePlanId) : undefined,
+                      })
+                    }
+                  >
+                    <KeyRound />
+                    تأكيد وإصدار الكود
+                  </Button>
+                </DialogFooter>
+              </>
+            )}
+
             {refunding && (
               <p className="rounded-md bg-muted p-3 text-sm">
                 المتاح للاسترداد:{' '}

@@ -128,6 +128,11 @@ function buildUrl(path: string, params?: RequestOptions['params']): string {
 export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const { body, _retried, params, headers, ...rest } = options;
 
+  // FormData must be handed to fetch untouched: it sets its own multipart
+  // boundary, and a Content-Type of application/json here would produce a body
+  // the server cannot parse at all.
+  const isFormData = body instanceof FormData;
+
   let response: Response;
   try {
     response = await fetch(buildUrl(path, params), {
@@ -135,11 +140,13 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
       // The refresh cookie must travel with every request.
       credentials: 'include',
       headers: {
-        ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
+        ...(body !== undefined && !isFormData ? { 'Content-Type': 'application/json' } : {}),
         ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
         ...headers,
       },
-      ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+      ...(body !== undefined
+        ? { body: isFormData ? (body as FormData) : JSON.stringify(body) }
+        : {}),
     });
   } catch {
     // A DNS failure, a refused connection or a CORS rejection rejects before
@@ -185,11 +192,57 @@ function safeJsonParse(text: string): any {
   }
 }
 
+/**
+ * Fetches a binary body.
+ *
+ * Separate from `apiRequest` because that one always parses the response as
+ * JSON — on an image route that silently yields `null` and loses the picture.
+ * Errors are still raised as `ApiError` so callers can treat both paths alike.
+ */
+async function apiBlob(path: string, headers?: Record<string, string>): Promise<Blob> {
+  let response: Response;
+  try {
+    response = await fetch(buildUrl(path), {
+      method: 'GET',
+      credentials: 'include',
+      headers: { ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}), ...headers },
+    });
+  } catch {
+    throw new ApiError(0, 'NETWORK_ERROR', 'تعذّر الاتصال بالخادم. تحقق من اتصالك بالإنترنت.');
+  }
+
+  if (!response.ok) {
+    // The error route answers JSON even though the success route does not.
+    const payload = safeJsonParse(await response.text());
+    const error = (payload?.error ?? {}) as ApiErrorShape;
+    throw new ApiError(
+      response.status,
+      error.code ?? 'UNKNOWN',
+      error.message ?? `Request failed with status ${response.status}`,
+      error.details,
+      error.requestId,
+    );
+  }
+
+  return response.blob();
+}
+
 export const api = {
-  get: <T>(path: string, params?: RequestOptions['params']) =>
-    apiRequest<T>(path, { method: 'GET', params }),
-  post: <T>(path: string, body?: unknown) => apiRequest<T>(path, { method: 'POST', body }),
-  put: <T>(path: string, body?: unknown) => apiRequest<T>(path, { method: 'PUT', body }),
-  patch: <T>(path: string, body?: unknown) => apiRequest<T>(path, { method: 'PATCH', body }),
-  delete: <T>(path: string, body?: unknown) => apiRequest<T>(path, { method: 'DELETE', body }),
+  getBlob: (path: string, headers?: Record<string, string>) => apiBlob(path, headers),
+  get: <T>(path: string, params?: RequestOptions['params'], headers?: Record<string, string>) =>
+    apiRequest<T>(path, { method: 'GET', params, headers }),
+  post: <T>(path: string, body?: unknown, headers?: Record<string, string>) =>
+    apiRequest<T>(path, { method: 'POST', body, headers }),
+  put: <T>(path: string, body?: unknown, headers?: Record<string, string>) =>
+    apiRequest<T>(path, { method: 'PUT', body, headers }),
+  patch: <T>(path: string, body?: unknown, headers?: Record<string, string>) =>
+    apiRequest<T>(path, { method: 'PATCH', body, headers }),
+  delete: <T>(path: string, body?: unknown, headers?: Record<string, string>) =>
+    apiRequest<T>(path, { method: 'DELETE', body, headers }),
+  /**
+   * Multipart upload. The Content-Type header is deliberately omitted so the
+   * browser can add the multipart boundary itself.
+   */
+  postForm: <T>(path: string, body: FormData, headers?: Record<string, string>) =>
+    apiRequest<T>(path, { method: 'POST', body, headers }),
 };

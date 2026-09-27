@@ -10,7 +10,9 @@ import type { Request } from 'express';
 import { AuditService, type AuditActor } from '../common/audit/audit.service';
 import { paginated, type PaginatedResponse, type PaginationQueryDto } from '../common/dto/pagination.dto';
 import { PrismaService } from '../common/prisma/prisma.service';
+import { LicensesService } from '../licenses/licenses.service';
 import {
+  ApproveActivationDto,
   CreatePaymentDto,
   ListPaymentsQueryDto,
   RefundPaymentDto,
@@ -37,6 +39,9 @@ export class PaymentsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    // Injected so an activation can be approved without the reviewer having to
+    // leave the screen and re-find the customer.
+    private readonly licenses: LicensesService,
   ) {}
 
   // ------------------------------------------------------------------
@@ -452,5 +457,132 @@ export class PaymentsService {
       default:
         return addMonths(from, periods);
     }
+  }
+
+  /**
+   * Approves a portal activation request end to end.
+   *
+   * The order matters and is deliberate:
+   *
+   *   1. The payment is marked PAID and `downloadEnabled` is set. This is the
+   *      part that must never be lost, because it is the record that the money
+   *      arrived.
+   *   2. The licence is issued afterwards, through LicensesService, so key
+   *      generation and signing stay in one place.
+   *
+   * If step 2 fails, the money is still recorded and the endpoint says so
+   * explicitly, so the owner can retry issuing without re-verifying. Issuing is
+   * also skipped for a customer who already holds a live licence on the plan,
+   * so a second approval cannot hand out a duplicate key.
+   */
+  async approveActivation(
+    id: number,
+    dto: ApproveActivationDto,
+    actor: AuditActor,
+    req: Request,
+  ) {
+    const payment = await this.prisma.payment.findUniqueOrThrow({
+      where: { id },
+      include: { customer: true, subscription: true },
+    });
+
+    if (isClosed(payment.status)) {
+      throw new ConflictException(`A ${payment.status} payment cannot be approved`);
+    }
+
+    const now = new Date();
+    const alreadyPaid = payment.status === PaymentStatus.PAID;
+
+    await this.prisma.$transaction(async (tx) => {
+      if (!alreadyPaid) {
+        await tx.payment.update({
+          where: { id },
+          data: {
+            status: PaymentStatus.PAID,
+            paidAt: payment.paidAt ?? now,
+            verifiedById: actor.id,
+            verifiedAt: now,
+            notes: dto.notes ?? payment.notes,
+          },
+        });
+      }
+      // The download gate is part of accepting the payment, not a side effect
+      // of issuing the licence, so a licence failure does not revoke it.
+      await tx.customer.update({
+        where: { id: payment.customerId },
+        data: { downloadEnabled: true },
+      });
+    });
+
+    if (dto.issueLicense === false) {
+      return { payment, license: null, message: 'تم تأكيد الدفعة وتفعيل التحميل.' };
+    }
+
+    // The portal request carries the plan only through the amount it paid, so the
+    // plan is resolved from the owner's own catalogue: a request with no priced
+    // plan cannot silently mint a licence on the wrong tier.
+    const planId = dto.planId ?? (await this.resolvePlanFor(payment));
+    if (!planId) {
+      throw new BadRequestException(
+        'Payment confirmed, but no plan could be resolved. Pass planId to issue the licence.',
+      );
+    }
+
+    const existing = await this.prisma.license.findFirst({
+      where: {
+        customerId: payment.customerId,
+        planId,
+        status: { in: ['ACTIVE', 'TRIAL'] },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    if (existing) {
+      return {
+        payment,
+        license: existing,
+        message: 'تم تأكيد الدفعة. هذا العميل لديه ترخيص نشط على هذه الباقة بالفعل.',
+      };
+    }
+
+    const license = await this.licenses.create(
+      {
+        customerId: payment.customerId,
+        planId,
+        subscriptionId: payment.subscriptionId ?? undefined,
+        maxDevices: dto.maxDevices,
+        notes: dto.notes ?? `Issued from payment #${payment.id}`,
+      } as never,
+      actor,
+      req,
+    );
+
+    return { payment, license, message: 'تم تأكيد الدفعة وإصدار كود التفعيل.' };
+  }
+
+  /**
+   * Picks the plan a payment was made for.
+   *
+   * An exact price match is required. Falling back to "the most expensive plan"
+   * or "the only plan" would hand a customer a licence they did not pay for, so
+   * an ambiguous payment is refused instead.
+   */
+  private async resolvePlanFor(payment: {
+    amount: number;
+    subscription: { planId: number } | null;
+  }): Promise<number | null> {
+    if (payment.subscription) return payment.subscription.planId;
+
+    const matches = await this.prisma.plan.findMany({
+      where: { price: payment.amount, status: 'ACTIVE' },
+      select: { id: true },
+    });
+    if (matches.length === 1) return matches[0].id;
+
+    if (matches.length > 1) {
+      throw new BadRequestException(
+        'Several plans share this price. Pass planId to say which one was bought.',
+      );
+    }
+    return null;
   }
 }

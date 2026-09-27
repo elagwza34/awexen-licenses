@@ -69,7 +69,16 @@ if (ENV_FILES.length === 0) {
 
     // Global rate limiting. The auth endpoints apply stricter per-route limits.
     ThrottlerModule.forRoot([
-      { name: 'default', ttl: 60_000, limit: 300 },
+      {
+        name: 'default',
+        ttl: 60_000,
+        limit: 300,
+        // Emits X-RateLimit-Limit / -Remaining / -Reset. The limit is then
+        // legible to the client: without it a customer who genuinely hits the
+        // ceiling cannot tell how long to wait, which looks exactly like the
+        // site being down. `setHeaders` is a boolean flag in this version.
+        setHeaders: true,
+      },
     ]),
 
     ScheduleModule.forRoot(),

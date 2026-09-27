@@ -69,7 +69,12 @@ export class AllExceptionsFilter implements ExceptionFilter {
 
     response.status(status).json({
       success: false,
-      error: { code, message, details, requestId: logPayload.requestId },
+      error: {
+        code,
+        message: this.rateLimitMessage(status, message),
+        details,
+        requestId: logPayload.requestId,
+      },
     });
   }
 
@@ -84,6 +89,24 @@ export class AllExceptionsFilter implements ExceptionFilter {
       429: 'TOO_MANY_REQUESTS',
     };
     return map[status] ?? 'INTERNAL_ERROR';
+  }
+
+  /**
+   * Rewrites the generic 429 body.
+   *
+   * The throttler answers with "ThrottlerException: Too Many Requests", which
+   * tells a customer nothing actionable — it reads like the site is broken, and
+   * the Arabic front-end then shows a vague "try again shortly" with no idea
+   * whether to wait five seconds or five minutes. The window is a fixed 60
+   * seconds, so say so.
+   */
+  private rateLimitMessage(status: number, message: string | string[]): string | string[] {
+    if (status !== HttpStatus.TOO_MANY_REQUESTS) return message;
+    // Nest lets a handler attach an array of validation messages, so the
+    // string case is narrowed rather than assumed.
+    if (typeof message !== 'string') return message;
+    if (message.includes('15 minutes')) return message; // the per-account lockout
+    return 'You have sent too many requests in the last minute. Please wait 60 seconds and try again.';
   }
 
   private mapPrismaError(e: Prisma.PrismaClientKnownRequestError): {

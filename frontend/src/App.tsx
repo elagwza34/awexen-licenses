@@ -16,6 +16,15 @@ import { FeaturesPage } from '@/pages/features';
 import { LicenseDetailPage } from '@/pages/license-detail';
 import { LicensesPage } from '@/pages/licenses';
 import { CustomerRegisterPage } from '@/pages/customer-register';
+import { PortalLoginPage } from '@/pages/portal-login';
+import { PortalOverviewPage } from '@/pages/portal-overview';
+import { PortalLicensesPage } from '@/pages/portal-licenses';
+import { PortalSubscriptionPage } from '@/pages/portal-subscription';
+import { PortalRequestsPage } from '@/pages/portal-requests';
+import { PortalDownloadPage } from '@/pages/portal-download';
+import { PortalAccountPage } from '@/pages/portal-account';
+import { PortalLayout } from '@/layouts/portal-layout';
+import { PortalRoute } from '@/routes/portal-route';
 import { LoginPage } from '@/pages/login';
 import { NotFoundPage } from '@/pages/not-found';
 import { PaymentsPage } from '@/pages/payments';
@@ -53,6 +62,23 @@ export default function App() {
                   customer creates the account the owner then finds in the
                   panel. The download itself stays behind the payment gate. */}
               <Route path="/portal/register" element={<CustomerRegisterPage />} />
+
+              {/* The customer portal. Kept outside ProtectedRoute on purpose —
+                  that guard is for the owner's admin token, and a customer
+                  must never satisfy it. PortalRoute checks the customer token
+                  instead and sends them to the sign-in page, not the admin
+                  one, so a lost session never lands a customer in the panel. */}
+              <Route path="/portal/login" element={<PortalLoginPage />} />
+              <Route element={<PortalRoute />}>
+                <Route element={<PortalLayout />}>
+                  <Route path="/portal" element={<PortalOverviewPage />} />
+                  <Route path="/portal/licenses" element={<PortalLicensesPage />} />
+                  <Route path="/portal/subscription" element={<PortalSubscriptionPage />} />
+                  <Route path="/portal/requests" element={<PortalRequestsPage />} />
+                  <Route path="/portal/download" element={<PortalDownloadPage />} />
+                  <Route path="/portal/account" element={<PortalAccountPage />} />
+                </Route>
+              </Route>
 
               <Route path="/login" element={<LoginPage />} />
 

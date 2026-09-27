@@ -7,6 +7,10 @@ import {
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
+// Nest 10 has no `TooManyRequestsException`, and the route-level limiter throws
+// `ThrottlerException` for the same condition. Reusing it keeps one 429 shape
+// for the whole app instead of two subtly different ones.
+import { ThrottlerException } from '@nestjs/throttler';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import type { Request } from 'express';
@@ -91,19 +95,76 @@ export class CustomerPortalService {
 
   // ----------------------------------------------------------------- login
 
+  /**
+   * Per-account sign-in throttling.
+   *
+   * The route-level limit is per IP, which is the wrong unit for the case that
+   * actually matters: an attacker grinding one stolen email list from a botnet
+   * never trips a per-IP ceiling at all. This counts failures per email address
+   * instead, so the attack is capped no matter how many addresses it comes from.
+   *
+   * A fixed window is enough here because the cost of a wrong guess is a full
+   * Argon2id verify. The counter is in memory by design: losing it on restart
+   * costs an attacker a pause, not access.
+   */
+  private readonly failedSignIns = new Map<string, { count: number; firstAt: number }>();
+
+  private static readonly MAX_SIGN_IN_FAILURES = 5;
+  private static readonly SIGN_IN_WINDOW_MS = 15 * 60_000;
+
+  /** Throws when this address has recently failed too many times. */
+  private assertNotLockedOut(email: string): void {
+    const entry = this.failedSignIns.get(email);
+    if (!entry) return;
+
+    // The window has passed, so the record is stale and gets cleared lazily
+    // rather than by a timer that would keep the event loop busy.
+    if (Date.now() - entry.firstAt > CustomerPortalService.SIGN_IN_WINDOW_MS) {
+      this.failedSignIns.delete(email);
+      return;
+    }
+    if (entry.count >= CustomerPortalService.MAX_SIGN_IN_FAILURES) {
+      throw new ThrottlerException(
+        'Too many failed attempts. Please wait 15 minutes before trying again.',
+      );
+    }
+  }
+
+  private noteSignInFailure(email: string): void {
+    const entry = this.failedSignIns.get(email);
+    if (!entry || Date.now() - entry.firstAt > CustomerPortalService.SIGN_IN_WINDOW_MS) {
+      this.failedSignIns.set(email, { count: 1, firstAt: Date.now() });
+      return;
+    }
+    entry.count += 1;
+  }
+
+  private clearSignInFailures(email: string): void {
+    this.failedSignIns.delete(email);
+  }
+
   async login(dto: CustomerLoginDto, req: Request) {
     const email = dto.email.trim().toLowerCase();
+
+    this.assertNotLockedOut(email);
+
     const customer = await this.prisma.customer.findUnique({ where: { email } });
 
     const ok = await this.security.verifyPassword(
       dto.password,
+      // The dummy hash keeps the timing identical whether or not the address
+      // exists, so a probe cannot enumerate which emails are registered.
       customer?.passwordHash ?? DUMMY_HASH,
     );
 
     if (!customer || !customer.passwordHash || !ok) {
+      this.noteSignInFailure(email);
       this.logger.warn(`Failed portal sign-in for ${email}`);
       throw new UnauthorizedException('Incorrect email or password.');
     }
+
+    this.clearSignInFailures(email);
+
     if (customer.status === 'SUSPENDED') {
       throw new ForbiddenException('This account has been suspended. Please contact support.');
     }
@@ -291,6 +352,146 @@ export class CustomerPortalService {
 
     return { release };
   }
+
+  // -------------------------------------------------------- activation request
+
+  /**
+   * The plans a customer can pick from when requesting an activation code.
+   */
+  async catalogue() {
+    const plans = await this.prisma.plan.findMany({
+      where: { status: 'ACTIVE' },
+      orderBy: { sortOrder: 'asc' },
+      select: {
+        id: true,
+        key: true,
+        name: true,
+        nameAr: true,
+        price: true,
+        currency: true,
+        billingInterval: true,
+        trialDays: true,
+        maxDevices: true,
+        description: true,
+      },
+    });
+    return { plans };
+  }
+
+  /**
+   * The customer asks for an activation code and attaches the bank-transfer
+   * receipt.
+   *
+   * The row lands in the owner's Payments screen as PENDING, which is the review
+   * queue. Nothing is unlocked here: `downloadEnabled` and the licence itself
+   * remain the owner's decision, so a customer can submit as often as they
+   * like without gaining anything by doing so.
+   */
+  async requestActivation(
+    customerId: number,
+    input: {
+      planId: number;
+      amount: number;
+      notes?: string;
+      receipt: { url: string; size: number };
+      subscriptionId?: number;
+    },
+    req: Request,
+  ) {
+    const customer = await this.prisma.customer.findUniqueOrThrow({
+      where: { id: customerId },
+    });
+
+    if (customer.status === 'SUSPENDED') {
+      throw new ForbiddenException('This account has been suspended. Please contact support.');
+    }
+
+    const plan = await this.prisma.plan.findUnique({
+      where: { id: input.planId },
+      select: { id: true, key: true, name: true, status: true },
+    });
+    if (!plan || plan.status !== 'ACTIVE') {
+      throw new BadRequestException('The selected plan is not available.');
+    }
+
+    const payment = await this.prisma.payment.create({
+      data: {
+        customerId,
+        subscriptionId: input.subscriptionId ?? null,
+        amount: input.amount,
+        currency: 'EGP',
+        method: 'BANK_TRANSFER',
+        status: 'PENDING',
+        notes: input.notes?.trim() || null,
+        receiptUrl: input.receipt.url,
+        // A per-customer prefix, so the owner can tell whose receipt is whose
+        // while several are open at once, without opening each image.
+        transactionReference: `PORTAL-${customerId}-${Date.now()}`,
+      },
+    });
+
+    await this.recordAudit(req, customerId, 'ACTIVATION_REQUESTED');
+    this.logger.log(
+      `Activation requested by customer ${customerId} for plan ${plan.key} (payment ${payment.id})`,
+    );
+
+    return {
+      id: payment.id,
+      status: payment.status,
+      plan,
+      message: 'تم إرسال طلبك. سنتواصل معك بعد مراجعة الحوالة.',
+    };
+  }
+
+  /** The customer's own activation requests, so they can track progress. */
+  async myRequests(customerId: number) {
+    const payments = await this.prisma.payment.findMany({
+      where: { customerId },
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+      select: {
+        id: true,
+        amount: true,
+        currency: true,
+        status: true,
+        receiptUrl: true,
+        transactionReference: true,
+        createdAt: true,
+        verifiedAt: true,
+      },
+    });
+    return { data: payments };
+  }
+
+
+  /**
+   * Resolves one of this customer's own receipts.
+   *
+   * The stored `receiptUrl` is a bare `/receipts/<uuid>.png`, which is the
+   * owner's route and is deliberately admin-only. Rather than loosening that
+   * guard, ownership is proven here by loading the payment and checking its
+   * `customerId` — so a customer can read the receipt they uploaded and
+   * nothing else. The lookup is scoped in the query rather than filtered after
+   * it, so a foreign id returns 404 and never reveals that it exists.
+   */
+  async ownReceipt(customerId: number, paymentId: number) {
+    const payment = await this.prisma.payment.findFirst({
+      where: { id: paymentId, customerId },
+      select: { id: true, receiptUrl: true },
+    });
+
+    if (!payment?.receiptUrl) {
+      throw new NotFoundException('لا توجد حوالة لهذا الطلب.');
+    }
+
+    // Stored as `<prefix>/<uuid>.<ext>`; the storage service re-validates the
+    // filename, so anything unexpected here is refused at the read.
+    const name = payment.receiptUrl.split('/').pop() ?? '';
+    if (!name) throw new NotFoundException('لا توجد حوالة لهذا الطلب.');
+
+    return { name, paymentId: payment.id };
+  }
+
 
   // ------------------------------------------------------------- internals
 

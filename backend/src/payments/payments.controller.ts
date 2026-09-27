@@ -15,6 +15,7 @@ import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { PaginationQueryDto } from '../common/dto/pagination.dto';
 import { CurrentAdmin, RequirePermissions, type AuthAdmin } from '../common/decorators';
 import {
+  ApproveActivationDto,
   CreatePaymentDto,
   ListPaymentsQueryDto,
   RefundPaymentDto,
@@ -80,6 +81,25 @@ export class PaymentsController {
     @Req() req: any,
   ) {
     return this.payments.verify(id, dto, admin, req);
+  }
+
+  @Post(':id/approve-activation')
+  @HttpCode(HttpStatus.OK)
+  @RequirePermissions('payments.verify')
+  @ApiOperation({
+    summary: 'Approve a portal activation request: confirm the payment and issue the licence',
+    description:
+      'Marks the payment paid, unlocks the download, then issues a licence. ' +
+      'If the licence cannot be issued the payment stays confirmed and the reason ' +
+      'is returned, so approving money is never lost.',
+  })
+  approveActivation(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: ApproveActivationDto,
+    @CurrentAdmin() admin: AuthAdmin,
+    @Req() req: any,
+  ) {
+    return this.payments.approveActivation(id, dto, admin, req);
   }
 
   @Post(':id/reject')

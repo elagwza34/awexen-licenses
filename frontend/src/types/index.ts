@@ -119,6 +119,8 @@ export interface Payment {
   refundReason: string | null;
   paidAt: string | null;
   notes: string | null;
+  /** Set when the customer uploaded a bank-transfer receipt from the portal. */
+  receiptUrl: string | null;
   createdAt: string;
   customer?: { id: number; name: string; company: string | null; email: string };
 }

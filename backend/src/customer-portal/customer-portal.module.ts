@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { CryptoModule } from '../common/crypto/crypto.module';
 import { PrismaModule } from '../common/prisma/prisma.module';
+import { PaymentsModule } from '../payments/payments.module';
 import { CustomerPortalController } from './customer-portal.controller';
 import { CustomerPortalService } from './customer-portal.service';
 
@@ -16,7 +17,9 @@ import { CustomerPortalService } from './customer-portal.service';
  * requires 'customer-portal' and JwtAuthGuard requires 'owner-admin'.
  */
 @Module({
-  imports: [PrismaModule, CryptoModule],
+  // PaymentsModule brings ReceiptStorageService, which validates the uploaded
+  // bank-transfer receipt before it is written to disk.
+  imports: [PrismaModule, CryptoModule, PaymentsModule],
   controllers: [CustomerPortalController],
   providers: [CustomerPortalService],
   exports: [CustomerPortalService],

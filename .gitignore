@@ -83,3 +83,15 @@ frontend/web.err
 # admin password. Must never be committed.
 .deploy-secrets.local
 
+
+# Local diagnostics. These are throwaway load/capacity probes that talk to a
+# running dev instance and read its database — no value in shipping them, and
+# probe-load.js would otherwise be mistaken for a test suite.
+backend/probe-*.js
+backend/cleanup-probe-data.js
+
+# Uploaded bank-transfer receipts. These are customers' personal financial
+# documents, so they must never be committed; the directory is created on
+# first upload.
+backend/storage/
+storage/
