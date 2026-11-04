@@ -1,0 +1,51 @@
+# Railway — production deployment of the Owner Admin API.
+#
+# This file must be committed, and the service's "Root Directory" must be set to
+# /backend so that this file, the Dockerfile and the .dockerignore are the ones
+# Railway actually reads. Railway does NOT follow the root-directory setting for
+# the config file itself: in the dashboard the config path is entered as the
+# absolute /backend/railway.toml.
+#
+# The database is Neon, so no Railway Postgres is attached — the app only ever
+# talks to DATABASE_URL, supplied as a service variable.
+#
+# Railway has no Fly-style `release_command`. The equivalent is the pre-deploy
+# command below: it runs after the image is built and before the new deployment
+# goes live, and a non-zero exit fails the deployment instead of shipping a
+# half-migrated app.
+
+[build]
+# Force the Dockerfile. Without this, Railway's Nixpacks detection could pick up
+# the repository-root package.json instead of the backend build context.
+builder = "DOCKERFILE"
+# Resolved against the root directory, so this is backend/Dockerfile in repo terms.
+dockerfilePath = "Dockerfile"
+
+[deploy]
+# Migrations run ONCE per deployment, before any replica serves traffic. Running
+# them from the start command instead would let two replicas apply the same
+# migration concurrently.
+preDeployCommand = "npx prisma migrate deploy"
+# Neon cold starts and large schemas are slow; the default is no limit at all,
+# which lets a hung migration hold the deployment open indefinitely.
+preDeployTimeoutSeconds = 600
+
+# liveness + database + signing-key check. Same endpoint the Fly deployment uses.
+healthcheckPath = "/api/v1/health"
+healthcheckTimeout = 180
+
+# The scheduler (hourly status reconciliation, expiry notices, audit of
+# transitions) lives inside the app process. A crash must come back on its own,
+# but a clean exit must NOT be restarted forever.
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 5
+
+# Exactly one replica, always on.
+#   - two replicas would both run the same @Cron jobs;
+#   - a volume cannot be shared by replicas (see RECEIPTS_DIR in the docs);
+#   - `sleepApplication` is deliberately left off, because a sleeping service
+#     stops the maintenance jobs from running at all.
+numReplicas = 1
+
+# Time between SIGTERM and SIGKILL, so in-flight requests finish.
+drainingSeconds = 30

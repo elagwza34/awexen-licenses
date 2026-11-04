@@ -32,4 +32,5 @@ test/
 .gitignore
 Dockerfile
 fly.toml
+railway.toml
 .dockerignore
