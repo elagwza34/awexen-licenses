@@ -13,7 +13,7 @@
     "keygen": "npm --prefix backend run keygen",
     "api": "npm --prefix backend run start:dev",
     "web": "npm --prefix frontend run dev",
-    "build": "npm --prefix backend run build && npm --prefix frontend run build",
+    "build": "npm --prefix backend install && npm --prefix frontend install && npm --prefix backend run build && npm --prefix frontend run build",
     "typecheck": "npm --prefix backend run typecheck && npm --prefix frontend run typecheck",
     "verify": "npm --prefix backend run verify:all",
     "e2e": "node tools/e2e-test.mjs",
