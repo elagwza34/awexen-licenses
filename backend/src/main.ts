@@ -7,11 +7,15 @@ import helmet from 'helmet';
 import { AppModule } from './app.module';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { SettingsService } from './settings/settings.service';
+import { jsonBigIntReplacer } from './common/json-bigint';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, { bufferLogs: false });
   const config = app.get(ConfigService);
   const logger = new Logger('Bootstrap');
+  // File sizes from Prisma are BigInt, including portal overview/download and
+  // admin release responses. Keep JSON valid without losing large integers.
+  app.getHttpAdapter().getInstance().set('json replacer', jsonBigIntReplacer);
 
   // Required for correct req.ip behind the reverse proxy.
   if (String(config.get('TRUST_PROXY')) === 'true') {

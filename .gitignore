@@ -95,3 +95,4 @@ backend/cleanup-probe-data.js
 # first upload.
 backend/storage/
 storage/
+.hostinger/api-source/

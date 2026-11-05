@@ -4,7 +4,7 @@
 # committed because it names a real host. Keeping the default here means a
 # deploy is one command that cannot produce a bundle pointed at the wrong API.
 param(
-  [string]$ApiBaseUrl = 'https://api.awexen.com/api/v1',
+  [string]$ApiBaseUrl = 'https://licenses.awexen.com/api/v1',
   [string]$Project = 'owner-admin',
   [string]$Branch = 'main',
   # Set to $false to build without uploading.

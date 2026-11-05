@@ -52,6 +52,15 @@ export class LicenseValidationController {
     return this.validation.validate(dto, req);
   }
 
+  @Public()
+  @Post('status')
+  @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { limit: 300, ttl: 60_000 } })
+  @ApiOperation({ summary: 'Read-only desktop suspension heartbeat; does not renew offline permission' })
+  status(@Body() dto: ValidateLicenseDto) {
+    return this.validation.checkStatus(dto);
+  }
+
   @Get('history')
   @RequirePermissions('validations.view')
   @ApiOperation({ summary: 'Validation history for the owner panel' })

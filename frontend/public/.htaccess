@@ -1,0 +1,11 @@
+Options -Indexes
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  # Serve real files normally; let React Router handle application routes.
+  RewriteCond %{REQUEST_FILENAME} -f [OR]
+  RewriteCond %{REQUEST_FILENAME} -d
+  RewriteRule ^ - [L]
+  # Missing assets must remain 404 instead of receiving the application HTML.
+  RewriteRule ^assets/ - [L]
+  RewriteRule ^ index.html [L]
+</IfModule>

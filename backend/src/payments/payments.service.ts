@@ -276,6 +276,13 @@ export class PaymentsService {
       include: { subscription: true },
     });
 
+    // Initial purchases must deliver the licence as well as confirm the money.
+    // Keep subscription payments on the existing renewal path.
+    if (!payment.subscriptionId) {
+      await this.approveActivation(id, { notes: dto.notes }, actor, req);
+      return this.findOne(id);
+    }
+
     if (payment.status === PaymentStatus.PAID) {
       throw new ConflictException('Payment is already verified');
     }

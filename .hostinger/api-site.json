@@ -1,0 +1,11 @@
+{
+  "domain": "api.awexen.com",
+  "username": "u723774559",
+  "order_id": 1008301212,
+  "type": "nodejs",
+  "nodeVersion": 22,
+  "appType": "express",
+  "entryFile": "hostinger-start.cjs",
+  "buildScript": "build:hostinger",
+  "outputDirectory": null
+}

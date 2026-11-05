@@ -1,0 +1,8 @@
+{
+  "domain": "api.awexen.com",
+  "previousProvider": "Fly.io",
+  "records": [
+    { "id": "0b93061563ae2e2fe0f3e8dd0357fb83", "type": "A", "name": "api.awexen.com", "content": "66.241.124.140", "proxied": false, "ttl": 1 },
+    { "id": "f4c359ee402f3d672d51a6249e886f08", "type": "AAAA", "name": "api.awexen.com", "content": "2a09:8280:1::19c:bad7:0", "proxied": false, "ttl": 1 }
+  ]
+}

@@ -22,8 +22,8 @@ primary_region = "fra"
   # Public identity of the API. SERVER_NAME is also the host the panel expects.
   SERVER_NAME = "api.awexen.com"
   API_PUBLIC_URL = "https://api.awexen.com"
-  # The SPA is served from Cloudflare Pages on a different origin.
-  CORS_ORIGINS = "https://pms.awexen.com"
+  # Allow both the existing panel and the panel hosted on Hostinger.
+  CORS_ORIGINS = "https://pms.awexen.com,https://licenses.awexen.com"
   # Fly's proxy terminates TLS and sets X-Forwarded-*; without this every
   # request looks like it came from the proxy itself and rate limiting breaks.
   TRUST_PROXY = "true"

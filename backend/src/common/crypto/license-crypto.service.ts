@@ -96,6 +96,15 @@ export class LicenseCryptoService implements OnModuleInit {
     return { signature, payloadHash: this.hash(canonical), canonical };
   }
 
+  /** Signed opaque documents for bounded offline leases. */
+  signDocument(value: Record<string, unknown>): { document: string; signature: string } {
+    if (!this.privateKeyPem) throw new Error('Signing key is not loaded');
+    const document = JSON.stringify(value);
+    const signature = cryptoSign(this.algorithm === 'ed25519' ? null : 'sha256',
+      Buffer.from(document), this.privateKeyPem).toString('base64');
+    return { document, signature };
+  }
+
   /** Self-check used by the health endpoint. */
   verify(canonical: string, signature: string): boolean {
     try {

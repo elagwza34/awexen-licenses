@@ -27,6 +27,7 @@ export interface ValidateResponse {
   signature: string | null;
   publicKey: string | null;
   serverTime: string;
+  lease?: { document: string; signature: string };
   release: {
     latestVersion: string | null;
     minSupportedVersion: string | null;
@@ -53,6 +54,30 @@ export class LicenseValidationService {
   setIntervals(validationIntervalHours: number, gracePeriodDays: number): void {
     this.validationIntervalHours = validationIntervalHours;
     this.gracePeriodDays = gracePeriodDays;
+  }
+
+  /** Read-only heartbeat: no activation, lease renewal or validation-history writes. */
+  async checkStatus(input: ValidateRequest) {
+    const fingerprint = this.security.hashFingerprint([input.deviceFingerprint]);
+    const license = await this.prisma.license.findUnique({
+      where: { licenseKey: normalizeLicenseKey(input.licenseKey) },
+      include: { customer: { select: { status: true, deletedAt: true } },
+        devices: { where: { deviceFingerprint: fingerprint }, select: { status: true }, take: 1 } },
+    });
+    const denied = (status: ValidationStatus, message: string) => ({ valid: false, status, message });
+    if (!license) return denied(ValidationStatus.INVALID, 'License key not found');
+    if (license.customer.deletedAt || license.customer.status !== 'ACTIVE')
+      return denied(ValidationStatus.SUSPENDED, 'تم إيقاف حساب العميل. تواصل مع مسؤول التراخيص.');
+    const derived = this.statusService.derive(license);
+    if (derived.status === LicenseStatus.REVOKED) return denied(ValidationStatus.REVOKED, 'تم إلغاء الترخيص.');
+    if (derived.status === LicenseStatus.SUSPENDED) return denied(ValidationStatus.SUSPENDED, 'تم إيقاف الترخيص.');
+    if (derived.status === LicenseStatus.EXPIRED || (license.expiresAt && license.expiresAt.getTime() < Date.now()))
+      return denied(ValidationStatus.EXPIRED, 'انتهت صلاحية الترخيص.');
+    const device = license.devices[0];
+    if (!device) return denied(ValidationStatus.INVALID, 'يجب تفعيل الترخيص على هذا الجهاز أولًا.');
+    if (device.status === DeviceStatus.REVOKED || device.status === DeviceStatus.BLOCKED)
+      return denied(ValidationStatus.REVOKED, 'تم إيقاف الترخيص على هذا الجهاز.');
+    return { valid: true, status: ValidationStatus.SUCCESS, message: 'License is valid' };
   }
 
   async refreshSettings(): Promise<void> {
@@ -93,7 +118,7 @@ export class LicenseValidationService {
 
     const license = await this.prisma.license.findUnique({
       where: { licenseKey },
-      include: { plan: { include: { features: { include: { feature: true } } } } },
+      include: { customer: { select: { status: true, deletedAt: true } }, plan: { include: { features: { include: { feature: true } } } } },
     });
 
     const record = (data: {
@@ -137,6 +162,15 @@ export class LicenseValidationService {
 
     if (!license) {
       return fail(ValidationStatus.INVALID, 'License key not found');
+    }
+
+    // Account suspension applies to every licence, even if the licence itself
+    // remains ACTIVE. Keeping its status intact makes account reactivation reversible.
+    if (license.customer.deletedAt || license.customer.status !== 'ACTIVE') {
+      return fail(ValidationStatus.SUSPENDED, 'Customer account is suspended or inactive', {
+        licenseId: license.id,
+        customerId: license.customerId,
+      });
     }
 
     // ---- License-level checks ------------------------------------------
@@ -271,6 +305,16 @@ export class LicenseValidationService {
 
     const release = await this.resolveRelease(input.appVersion, input.platform);
 
+    const checkedAt = Date.now();
+    const nextCheckAt = Math.min(checkedAt + intervalMs,
+      license.expiresAt?.getTime() ?? Number.MAX_SAFE_INTEGER);
+    const offlineUntil = Math.min(nextCheckAt + this.gracePeriodDays * 86_400_000,
+      license.expiresAt?.getTime() ?? Number.MAX_SAFE_INTEGER);
+    const lease = this.crypto.signDocument({ purpose: 'desktop-offline-lease',
+      licenseKey: license.licenseKey, deviceFingerprint: input.deviceFingerprint,
+      validatedAt: new Date(checkedAt).toISOString(), nextCheckAt: new Date(nextCheckAt).toISOString(),
+      offlineUntil: new Date(offlineUntil).toISOString(), version: license.version });
+
     return {
       valid: true,
       status: ValidationStatus.SUCCESS,
@@ -281,6 +325,7 @@ export class LicenseValidationService {
       publicKey: this.crypto.getPublicKeyPem(),
       serverTime: new Date().toISOString(),
       release,
+      lease,
     };
   }
 

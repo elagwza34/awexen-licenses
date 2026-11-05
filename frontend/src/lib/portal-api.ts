@@ -161,6 +161,7 @@ async function portalRequest<T>(
 }
 
 export const portalApi = {
+  installer: () => portalRequest<{ release: { downloadUrl: string; version: string; checksum: string | null } }>('/portal/download'),
   register: (body: {
     name: string;
     email: string;

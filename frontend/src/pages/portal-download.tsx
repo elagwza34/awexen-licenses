@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
+import { useState } from 'react';
 import { Clock, Download, Loader2, Monitor, ShieldAlert } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -21,6 +22,18 @@ function fileSize(bytes: number | null): string {
  * to the customer, not the control itself.
  */
 export function PortalDownloadPage() {
+  const [downloading, setDownloading] = useState(false);
+  const [downloadError, setDownloadError] = useState('');
+  const download = async () => {
+    setDownloading(true); setDownloadError('');
+    try {
+      const result = await portalApi.installer();
+      const url = new URL(result.release.downloadUrl, window.location.origin);
+      if (url.protocol !== 'https:') throw new Error('رابط التنزيل غير متاح حالياً.');
+      window.location.assign(url.href);
+    } catch (error) { setDownloadError(error instanceof Error ? error.message : 'تعذر بدء التنزيل.'); }
+    finally { setDownloading(false); }
+  };
   const overview = useQuery({ queryKey: ['portal', 'overview'], queryFn: portalApi.overview });
 
   if (overview.isLoading) {
@@ -91,12 +104,11 @@ export function PortalDownloadPage() {
                 </div>
               </dl>
 
-              <Button asChild className="w-full gap-2 sm:w-auto">
-                <a href="/api/v1/portal/download">
+              <Button onClick={download} disabled={downloading} className="w-full gap-2 sm:w-auto">
                   <Download className="size-4" />
                   تحميل الآن
-                </a>
               </Button>
+              {downloadError && <p role="alert" className="text-sm text-destructive">{downloadError}</p>}
             </CardContent>
           </Card>
 
@@ -132,7 +144,7 @@ export function PortalDownloadPage() {
               <Monitor className="size-5" />
               خطوات التفعيل
             </CardTitle>
-            <CardDescription>ثلاث خطوات فقط.</CardDescription>
+            <CardDescription>تثبيت وتفعيل مرة واحدة، ثم تشغيل محلي.</CardDescription>
           </CardHeader>
           <CardContent>
             <ol className="space-y-3 text-sm">
@@ -140,6 +152,7 @@ export function PortalDownloadPage() {
                 'ثبّت البرنامج على جهازك.',
                 'افتح «أكواد التفعيل» وانسخ الكود.',
                 'الصق الكود في شاشة التفعيل — يُربط بجهازك تلقائياً.',
+                'سجّل الدخول بنفس البريد الإلكتروني وكلمة المرور لحسابك هنا. الربط الأول يحتاج اتصال إنترنت.',
               ].map((step, index) => (
                 <li key={step} className="flex items-start gap-3">
                   <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">
@@ -149,6 +162,9 @@ export function PortalDownloadPage() {
                 </li>
               ))}
             </ol>
+            <p className="mt-4 text-sm text-muted-foreground">
+              بيانات شغلك محفوظة على جهازك. بعد التفعيل والربط الأول، البرنامج يعمل محلياً ويتحقق من الترخيص حسب المدة المحددة في إعداداته.
+            </p>
             <p className="mt-4 flex items-start gap-2 rounded-md bg-muted/50 p-3 text-xs text-muted-foreground">
               <Clock className="mt-0.5 size-3.5 shrink-0" />
               يُربط الكود بعدد الأجهزة المسموح في باقتك. لتغيير الأجهزة راجع الدعم الفني.
