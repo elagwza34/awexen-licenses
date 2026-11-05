@@ -3,7 +3,7 @@ import { useMutation } from '@tanstack/react-query';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { Link } from 'react-router-dom';
-import { AlertCircle, CheckCircle2, KeyRound } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Eye, EyeOff, KeyRound } from 'lucide-react';
 import { z } from 'zod';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -213,19 +213,32 @@ function PasswordFields({
   register: ReturnType<typeof useForm<RegisterValues>>['register'];
   errors: FieldErrors;
 }) {
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
   return (
     <div className="grid gap-4 sm:grid-cols-2">
       <div className="space-y-2">
         <Label htmlFor="password">كلمة المرور</Label>
-        <Input
-          id="password"
-          type="password"
-          dir="ltr"
-          autoComplete="new-password"
-          className="text-start"
-          aria-invalid={Boolean(errors.password)}
-          {...register('password')}
-        />
+        <div className="relative">
+          <Input
+            id="password"
+            type={showPassword ? 'text' : 'password'}
+            dir="ltr"
+            autoComplete="new-password"
+            className="text-start pe-10"
+            aria-invalid={Boolean(errors.password)}
+            {...register('password')}
+          />
+          <button
+            type="button"
+            className="absolute inset-y-0 end-0 flex items-center px-3 text-muted-foreground hover:text-foreground"
+            onClick={() => setShowPassword((v) => !v)}
+            tabIndex={-1}
+            aria-label={showPassword ? 'إخفاء كلمة المرور' : 'إظهار كلمة المرور'}
+          >
+            {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+          </button>
+        </div>
         {errors.password ? (
           <p className="text-xs text-destructive">{errors.password.message}</p>
         ) : (
@@ -236,15 +249,26 @@ function PasswordFields({
       </div>
       <div className="space-y-2">
         <Label htmlFor="confirmPassword">تأكيد كلمة المرور</Label>
-        <Input
-          id="confirmPassword"
-          type="password"
-          dir="ltr"
-          autoComplete="new-password"
-          className="text-start"
-          aria-invalid={Boolean(errors.confirmPassword)}
-          {...register('confirmPassword')}
-        />
+        <div className="relative">
+          <Input
+            id="confirmPassword"
+            type={showConfirm ? 'text' : 'password'}
+            dir="ltr"
+            autoComplete="new-password"
+            className="text-start pe-10"
+            aria-invalid={Boolean(errors.confirmPassword)}
+            {...register('confirmPassword')}
+          />
+          <button
+            type="button"
+            className="absolute inset-y-0 end-0 flex items-center px-3 text-muted-foreground hover:text-foreground"
+            onClick={() => setShowConfirm((v) => !v)}
+            tabIndex={-1}
+            aria-label={showConfirm ? 'إخفاء تأكيد كلمة المرور' : 'إظهار تأكيد كلمة المرور'}
+          >
+            {showConfirm ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+          </button>
+        </div>
         {errors.confirmPassword && (
           <p className="text-xs text-destructive">{errors.confirmPassword.message}</p>
         )}

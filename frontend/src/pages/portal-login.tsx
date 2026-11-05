@@ -1,8 +1,8 @@
 import { useMutation } from '@tanstack/react-query';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { AlertCircle, KeyRound, Loader2, LogIn } from 'lucide-react';
+import { AlertCircle, Eye, EyeOff, KeyRound, Loader2, LogIn } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input, Label } from '@/components/ui/input';
@@ -22,6 +22,7 @@ export function PortalLoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const { token } = usePortalSession();
+  const [showPassword, setShowPassword] = useState(false);
 
   // PortalRoute parks the page the customer wanted in `state.from`, so signing
   // in returns them to it instead of always dumping them on the overview. The
@@ -84,12 +85,24 @@ export function PortalLoginPage() {
 
             <div className="space-y-1.5">
               <Label htmlFor="password">كلمة المرور</Label>
-              <Input
-                id="password"
-                type="password"
-                dir="ltr"
-                {...form.register('password', { required: 'كلمة المرور مطلوبة' })}
-              />
+              <div className="relative">
+                <Input
+                  id="password"
+                  type={showPassword ? 'text' : 'password'}
+                  dir="ltr"
+                  className="pe-10"
+                  {...form.register('password', { required: 'كلمة المرور مطلوبة' })}
+                />
+                <button
+                  type="button"
+                  className="absolute inset-y-0 end-0 flex items-center px-3 text-muted-foreground hover:text-foreground"
+                  onClick={() => setShowPassword((v) => !v)}
+                  tabIndex={-1}
+                  aria-label={showPassword ? 'إخفاء كلمة المرور' : 'إظهار كلمة المرور'}
+                >
+                  {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                </button>
+              </div>
             </div>
 
             {mutation.isError ? (
