@@ -1,7 +1,7 @@
 import { useMutation } from '@tanstack/react-query';
 import { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { AlertCircle, KeyRound, Loader2, LogIn } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -116,12 +116,6 @@ export function PortalLoginPage() {
               >
                 أنشئ حساباً
               </button>
-            </p>
-
-            <p className="text-center text-xs">
-              <Link to="/admin/login" className="text-muted-foreground hover:underline">
-                دخول المالك
-              </Link>
             </p>
           </form>
         </CardContent>

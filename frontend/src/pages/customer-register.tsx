@@ -27,7 +27,7 @@ const registerSchema = z
     name: z.string().min(2, 'الاسم قصير جداً').max(160),
     email: z.string().min(1, 'البريد الإلكتروني مطلوب').email('بريد إلكتروني غير صحيح'),
     company: z.string().max(160).optional().or(z.literal('')),
-    phone: z.string().max(40).optional().or(z.literal('')),
+    phone: z.string().min(1, 'رقم الهاتف مطلوب').max(40),
     country: z.string().max(80).optional().or(z.literal('')),
     password: z
       .string()
@@ -173,8 +173,9 @@ function RegisterForm({ register, handleSubmit, errors, onSubmit, error, pending
                   {errors.email && <p className="text-xs text-destructive">{errors.email.message}</p>}
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="phone">الهاتف (اختياري)</Label>
-                  <Input id="phone" dir="ltr" placeholder="+20 100 000 0000" className="text-start" {...register('phone')} />
+                  <Label htmlFor="phone">الهاتف</Label>
+                  <Input id="phone" dir="ltr" placeholder="+20 100 000 0000" className="text-start" aria-invalid={Boolean(errors.phone)} {...register('phone', { required: 'رقم الهاتف مطلوب' })} />
+                  {errors.phone && <p className="text-xs text-destructive">{errors.phone.message}</p>}
                 </div>
               </div>
 
