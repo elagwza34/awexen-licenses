@@ -156,7 +156,7 @@ export function PortalLoginPage() {
                 type="button"
                 className="font-medium text-primary hover:underline"
                 onClick={() => {
-                  setMode(isRegister ? 'login' : 'register');
+                  navigate(isRegister ? '/portal/login' : '/portal/register');
                   mutation.reset();
                 }}
               >
