@@ -90,12 +90,12 @@ export function PortalLoginPage() {
                   id="password"
                   type={showPassword ? 'text' : 'password'}
                   dir="ltr"
-                  className="pe-10"
+                  className="pr-10"
                   {...form.register('password', { required: 'كلمة المرور مطلوبة' })}
                 />
                 <button
                   type="button"
-                  className="absolute inset-y-0 end-0 flex items-center px-3 text-muted-foreground hover:text-foreground"
+                  className="absolute inset-y-0 right-0 flex items-center px-3 text-muted-foreground hover:text-foreground"
                   onClick={() => setShowPassword((v) => !v)}
                   tabIndex={-1}
                   aria-label={showPassword ? 'إخفاء كلمة المرور' : 'إظهار كلمة المرور'}
