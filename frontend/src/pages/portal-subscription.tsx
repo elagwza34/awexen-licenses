@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { AlertCircle, Check, Loader2, Upload } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -12,8 +12,12 @@ import { portalApi } from '@/lib/portal-api';
 export function PortalSubscriptionPage() {
   const client = useQueryClient();
   const catalogue = useQuery({ queryKey: ['portal', 'catalogue'], queryFn: portalApi.catalogue });
+  const customer = useQuery({ queryKey: ['portal', 'me'], queryFn: portalApi.me });
   const [planId, setPlanId] = useState<number | null>(null);
 
+  useEffect(() => {
+    if (customer.data?.requestedPlanId) setPlanId(customer.data.requestedPlanId);
+  }, [customer.data?.requestedPlanId]);
   const mutation = useMutation({
     mutationFn: portalApi.requestActivation,
     onSuccess: (result) => {
@@ -27,14 +31,18 @@ export function PortalSubscriptionPage() {
 
   const plans = catalogue.data?.plans ?? [];
   const selected = plans.find((item) => item.id === planId) ?? null;
+  const setupFee = customer.data?.downloadEnabled ? 0 : (selected?.setupFee ?? 0);
+  const total = (selected?.price ?? 0) + setupFee;
 
-  if (catalogue.isLoading) {
+  if (catalogue.isLoading || customer.isLoading) {
     return (
       <div className="flex justify-center py-20">
         <Loader2 className="size-6 animate-spin text-muted-foreground" />
       </div>
     );
   }
+
+  if (catalogue.isError || customer.isError) return <p role="alert" className="p-8 text-center">تعذّر تحميل بيانات الاشتراك. أعد تحميل الصفحة للمحاولة.</p>;
 
   return (
     <div className="space-y-6">
@@ -93,6 +101,8 @@ export function PortalSubscriptionPage() {
                       : 'لم يُحدَّد السعر بعد'}
                   </p>
 
+                  {plan.setupFee > 0 && <p className="mt-2 text-xs text-muted-foreground">رسوم التفعيل لأول مرة: {money(plan.setupFee, plan.currency)}</p>}
+                  <p className="mt-2 text-xs text-muted-foreground">{plan.maxUsers} مستخدم · {plan.maxBranches} فرع · {plan.maxWarehouses} مخزن</p>
                   {plan.description && (
                     <p className="mt-3 text-sm text-muted-foreground">{plan.description}</p>
                   )}
@@ -120,7 +130,7 @@ export function PortalSubscriptionPage() {
                   تأكيد الدفع — {selected.nameAr ?? selected.name}
                 </CardTitle>
                 <CardDescription>
-                  حوّل {money(selected.price, selected.currency)} ثم ارفع صورة القسيمة. سيراجعها
+                  حوّل {money(total, selected.currency)} ثم ارفع صورة القسيمة. سيراجعها
                   المالك ويصدر كود التفعيل فور التأكد.
                 </CardDescription>
               </CardHeader>
@@ -129,7 +139,7 @@ export function PortalSubscriptionPage() {
                   isPending={mutation.isPending}
                   error={(mutation.error as Error | undefined)?.message}
                   onSubmit={(receipt, notes) =>
-                    mutation.mutate({ planId: selected.id, amount: selected.price, receipt, notes })
+                    mutation.mutate({ planId: selected.id, amount: total, receipt, notes })
                   }
                 />
               </CardContent>

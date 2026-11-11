@@ -121,6 +121,10 @@ export class CustomerPortalController {
 
   // ------------------------------------------------------ activation request
 
+  @Get('public-catalogue')
+  @Public()
+  publicCatalogue() { return this.portal.catalogue(); }
+
   @Get('catalogue')
   @Public()
   @UseGuards(CustomerJwtGuard)

@@ -1,0 +1,51 @@
+require('ts-node/register/transpile-only');
+const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),crypto=require('node:crypto');
+const {PrismaClient}=require('@prisma/client');
+const {PmsInstallationsService}=require('../src/licenses/pms-installations.service');
+const {LicenseCryptoService}=require('../src/common/crypto/license-crypto.service');
+test('isolated PostgreSQL server identity, concurrent seats, key binding, replacement, expiry and revocation',async()=>{
+  const url=new URL(process.env.PMS_LMS_TEST_URL||'');
+  assert.equal(url.hostname,'127.0.0.1');assert.equal(url.username,'pms_remediation_test_admin');assert.match(url.pathname,/^\/pms_lms_test_[0-9a-f]{32}$/);assert.notEqual(url.port,'5432');
+  const db=new PrismaClient({datasources:{db:{url:url.toString()}}});
+  try{
+    const actual=await db.$queryRawUnsafe('SHOW data_directory');
+    assert.equal(require('node:path').resolve(actual[0].data_directory).toLowerCase(),require('node:path').resolve(process.env.PMS_TEST_DATA_DIRECTORY).toLowerCase());
+    const customer=await db.customer.create({data:{name:'Synthetic LAN owner',email:'lan-owner@example.invalid'}});
+    const plan=await db.plan.create({data:{key:'PMS_FIXTURE',name:'Synthetic plan',maxDevices:1,maxUsers:5,maxBranches:2,maxWarehouses:2,enforceEntitlements:false}});
+    const license=await db.license.create({data:{licenseKey:'PMS-SYNTHETIC-LAN-TEST',customerId:customer.id,planId:plan.id,status:'ACTIVE',startsAt:new Date(Date.now()-86400000),expiresAt:new Date(Date.now()+60*86400000),maxDevices:1}});
+    const admin=await db.admin.create({data:{email:'synthetic-admin@example.invalid',name:'Synthetic administrator',passwordHash:'not-a-production-password'}});
+    const pair=crypto.generateKeyPairSync('rsa',{modulusLength:2048});const signing=new LicenseCryptoService({});
+    signing.privateKeyPem=pair.privateKey.export({type:'pkcs8',format:'pem'});signing.publicKeyPem=pair.publicKey.export({type:'spki',format:'pem'});
+    const service=new PmsInstallationsService(db,signing,{hashFingerprint:parts=>crypto.createHash('sha256').update(parts.join('|')).digest('hex')});
+    const actor={id:admin.id,email:admin.email};const server=await service.register(license.licenseKey,'SERVER-SYNTHETIC-ONE',false,'Initial test registration',actor);
+    assert.equal(await db.device.count(),0);assert.equal(server.serverOnlyConsumesSeat,false);
+    const serverGrant=await service.serverGrant(license.licenseKey,'SERVER-SYNTHETIC-ONE');
+    const workstation=crypto.generateKeyPairSync('rsa',{modulusLength:2048});
+    const input={licenseKey:license.licenseKey,serverInstanceId:server.installationId,deviceFingerprint:'WORKSTATION-SYNTHETIC-ONE',devicePublicKey:workstation.publicKey.export({type:'spki',format:'pem'}),appVersion:'1.4.2'};
+    const competitors=await Promise.all([service.validate(input),service.validate({...input,deviceFingerprint:'WORKSTATION-SYNTHETIC-TWO'})]);
+    assert.equal(competitors.filter(x=>x.valid).length,1);assert.equal(await db.device.count({where:{status:'ACTIVE'}}),1);
+    const accepted=competitors[0].valid?input:{...input,deviceFingerprint:'WORKSTATION-SYNTHETIC-TWO'};
+    const good=await service.validate(accepted);assert.equal(good.valid,true);assert.equal(await db.device.count(),1);
+    const lease=JSON.parse(good.lease.document);assert.equal(Date.parse(lease.nextCheckAt)-Date.parse(lease.validatedAt),7*86400000);assert.equal(Date.parse(lease.offlineUntil)-Date.parse(lease.validatedAt),14*86400000);
+    assert.equal((await service.validate({...accepted,deviceFingerprint:'SERVER-SYNTHETIC-ONE'})).valid,false); // Server+WPF requires a workstation seat.
+    const wrongKey=crypto.generateKeyPairSync('rsa',{modulusLength:2048}).publicKey.export({type:'spki',format:'pem'});
+    assert.equal((await service.validate({...accepted,devicePublicKey:wrongKey})).valid,false);
+    const before=(await db.device.findFirst()).lastValidationAt.getTime();assert.equal((await service.status(accepted)).valid,true);assert.equal((await db.device.findFirst()).lastValidationAt.getTime(),before);
+    if(process.env.PMS_LAN_CONTRACT_OUTPUT)fs.writeFileSync(process.env.PMS_LAN_CONTRACT_OUTPUT,JSON.stringify({publicKey:signing.publicKeyPem,server:serverGrant,workstation:good.lease,expectedFingerprint:'SERVER-SYNTHETIC-ONE'}));
+    await assert.rejects(service.register(license.licenseKey,'SERVER-SYNTHETIC-REPLACED',false,'Not approved replacement',actor));
+    const replacement=await service.register(license.licenseKey,'SERVER-SYNTHETIC-REPLACED',true,'Explicit synthetic administrator approval',actor);assert.notEqual(replacement.installationId,server.installationId);
+    assert.equal((await service.validate(accepted)).valid,false);await assert.rejects(service.serverGrant(license.licenseKey,'SERVER-SYNTHETIC-ONE'));
+    const device=await db.device.findFirst();await service.reset(license.licenseKey,device.id,'Synthetic approved device recovery',actor);
+    const rebound={...accepted,serverInstanceId:replacement.installationId};assert.equal((await service.validate(rebound)).valid,true);
+    await db.license.update({where:{id:license.id},data:{status:'ACTIVE',expiresAt:new Date(Date.now()-13*86400000)}});const grace=await service.validate(rebound);assert.equal(grace.valid,true);assert.ok(Date.parse(JSON.parse(grace.lease.document).offlineUntil)-Date.now()<=86400000);
+    await db.license.update({where:{id:license.id},data:{expiresAt:new Date(Date.now()-15*86400000)}});assert.equal((await service.validate(rebound)).valid,false);
+    await db.license.update({where:{id:license.id},data:{status:'REVOKED',expiresAt:null}});assert.equal((await service.validate(rebound)).valid,false);assert.equal((await service.status(rebound)).valid,false);
+    const legacyLicense=await db.license.create({data:{licenseKey:'PMS-SYNTHETIC-LEGACY-TEST',customerId:customer.id,planId:plan.id,status:'ACTIVE',startsAt:new Date(Date.now()-86400000),expiresAt:new Date(Date.now()+60*86400000),maxDevices:1}});
+    const {LicenseValidationService}=require('../src/licenses/license-validation.service');
+    const legacy=new LicenseValidationService(db,signing,{hashFingerprint:parts=>crypto.createHash('sha256').update(parts.join('|')).digest('hex')},{},{derive:row=>({status:row.status})});
+    const legacyResults=await Promise.all(['LEGACY-ONE','LEGACY-TWO'].map(deviceFingerprint=>legacy.validate({licenseKey:legacyLicense.licenseKey,deviceFingerprint,appVersion:'1.4.2'},{ip:'127.0.0.1'})));
+    assert.equal(legacyResults.filter(x=>x.valid).length,1);assert.equal(await db.device.count({where:{licenseId:legacyLicense.id,status:'ACTIVE'}}),1);
+    const legacyLease=JSON.parse(legacyResults.find(x=>x.valid).lease.document);
+    assert.equal(Date.parse(legacyLease.nextCheckAt)-Date.parse(legacyLease.validatedAt),7*86400000);assert.equal(Date.parse(legacyLease.offlineUntil)-Date.parse(legacyLease.validatedAt),14*86400000);
+  }finally{await db.$disconnect();}
+});

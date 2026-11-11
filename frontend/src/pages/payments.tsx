@@ -211,7 +211,7 @@ export function PaymentsPage() {
               isLoading={acting === `approve-${row.id}`}
               onClick={() => {
                 setApproving(row);
-                setApprovePlanId('');
+                setApprovePlanId(row.planId ? String(row.planId) : '');
               }}
             >
               <KeyRound />
@@ -343,7 +343,7 @@ export function PaymentsPage() {
                     value={approvePlanId}
                     onChange={(event) => setApprovePlanId(event.target.value)}
                   >
-                    <option value="">تلقائي (مطابق للمبلغ)</option>
+                    <option value="">تلقائي (الخطة المحفوظة بالطلب)</option>
                     {(plansQuery.data?.data ?? []).map((plan) => (
                       <option key={plan.id} value={plan.id}>
                         {plan.nameAr ?? plan.name} — {formatMoney(plan.price, plan.currency)}
@@ -351,7 +351,7 @@ export function PaymentsPage() {
                     ))}
                   </select>
                   <p className="text-xs text-muted-foreground">
-                    يُختار تلقائياً عند مطابقة المبلغ لباقة واحدة. حدّده يدوياً إذا تطابقت أكثر من باقة.
+                    تُعتمد الخطة المحفوظة في الطلب تلقائياً؛ وللطلبات القديمة تُراجع مطابقة المبلغ.
                   </p>
                 </div>
 

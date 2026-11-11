@@ -80,6 +80,7 @@ export function PortalRequestsPage() {
                     className="flex flex-wrap items-center justify-between gap-3 rounded-lg border p-3"
                   >
                     <div className="min-w-0">
+                      {item.plan && <p className="mb-1 text-sm font-medium">{item.plan.nameAr ?? item.plan.name} · {item.plan.billingInterval === 'YEARLY' ? 'سنوي' : 'شهري'}</p>}
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="font-medium tabular-nums">
                           {money(item.amount, item.currency)}

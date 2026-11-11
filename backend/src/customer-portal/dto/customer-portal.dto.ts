@@ -12,6 +12,12 @@ import {
 } from 'class-validator';
 
 export class CustomerRegisterDto {
+  @ApiPropertyOptional({ description: "Stable catalogue key, including the billing interval." })
+  @IsOptional()
+  @IsString()
+  @MaxLength(60)
+  planKey?: string;
+
   @ApiProperty({ example: 'buyer@company.com' })
   @IsEmail({}, { message: 'A valid email address is required.' })
   @MaxLength(180)

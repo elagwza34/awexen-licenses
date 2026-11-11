@@ -1,5 +1,5 @@
-import { useQuery } from '@tanstack/react-query';
-import { Boxes, KeyRound, Monitor, Pencil, Plus } from 'lucide-react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Boxes, KeyRound, Monitor, Pencil, Plus, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -9,11 +9,17 @@ import { BillingIntervalBadge } from '@/components/status-badge';
 import { api, ApiError } from '@/lib/api';
 import { formatMoney } from '@/lib/utils';
 import { useAuth } from '@/hooks/use-auth';
+import { useToast } from '@/hooks/use-toast';
+import { useConfirm } from '@/hooks/use-confirm';
 import type { Feature, Plan } from '@/types';
 import { PlanFormDialog } from './plan-form-dialog';
 
 export function PlansPage() {
   const { can } = useAuth();
+  const queryClient = useQueryClient();
+  const toast = useToast();
+  const { confirm, confirmDialog } = useConfirm();
+  const [showArchived, setShowArchived] = useState(false);
   const [editing, setEditing] = useState<Plan | null>(null);
   const [creating, setCreating] = useState(false);
 
@@ -28,8 +34,20 @@ export function PlansPage() {
     enabled: creating || editing !== null,
   });
 
+  const remove = useMutation({
+    mutationFn: (id: number) => api.delete<{ deleted: boolean; archived: boolean }>(`/plans/${id}`),
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ['plans'] });
+      toast.success(result.archived ? 'تمت إزالة الخطة من البيع' : 'تم حذف الخطة',
+        result.archived ? 'حُفظت بالأرشيف للحفاظ على تراخيص العملاء والاشتراكات والمدفوعات المرتبطة.' : undefined);
+    },
+    onError: (error) => toast.error('تعذّر الحذف', (error as ApiError).friendlyMessage),
+  });
+  const visiblePlans = plans.data?.data.filter(plan => showArchived || plan.status !== 'ARCHIVED') ?? [];
+
   return (
     <div className="space-y-4">
+      {confirmDialog}
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold">الخطط</h1>
@@ -45,6 +63,11 @@ export function PlansPage() {
         )}
       </header>
 
+      <label className="flex items-center gap-2 text-sm">
+        <input type="checkbox" checked={showArchived} onChange={event => setShowArchived(event.target.checked)} />
+        إظهار الخطط المؤرشفة
+      </label>
+
       {plans.isLoading ? (
         <div className="grid gap-4 lg:grid-cols-3">
           {Array.from({ length: 3 }).map((_, index) => (
@@ -57,7 +80,7 @@ export function PlansPage() {
           description={(plans.error as ApiError).friendlyMessage}
           onRetry={() => plans.refetch()}
         />
-      ) : !plans.data?.data.length ? (
+      ) : !visiblePlans.length ? (
         <Card>
           <EmptyState
             icon={Boxes}
@@ -75,7 +98,7 @@ export function PlansPage() {
         </Card>
       ) : (
         <div className="grid gap-4 lg:grid-cols-3">
-          {plans.data.data.map((plan) => (
+          {visiblePlans.map((plan) => (
             <Card key={plan.id} className="flex flex-col">
               <CardHeader>
                 <div className="flex items-start justify-between gap-2">
@@ -101,7 +124,8 @@ export function PlansPage() {
                       <Monitor className="h-3 w-3" />
                       {plan.maxDevices} جهاز
                     </Badge>
-                    {plan.trialDays > 0 && <Badge variant="muted">تجربة {plan.trialDays} يوم</Badge>}
+                    {plan.enforceEntitlements && <><Badge variant="muted">{plan.maxUsers} مستخدم</Badge><Badge variant="muted">{plan.maxBranches} فرع</Badge><Badge variant="muted">{plan.maxWarehouses} مخزن</Badge></>}
+                      {plan.trialDays > 0 && <Badge variant="muted">تجربة {plan.trialDays} يوم</Badge>}
                   </div>
                 </div>
 
@@ -124,12 +148,23 @@ export function PlansPage() {
                 </div>
               </CardContent>
 
-              {can('plans.update') && (
-                <div className="border-t border-border p-4">
+              {(can('plans.update') || can('plans.delete')) && (
+                <div className="flex gap-2 border-t border-border p-4">
+                  {can('plans.update') && (
                   <Button variant="outline" size="sm" onClick={() => setEditing(plan)}>
                     <Pencil />
                     تعديل
                   </Button>
+                  )}
+                  {can('plans.delete') && (
+                    <Button variant="destructive" size="sm" disabled={remove.isPending}
+                      isLoading={remove.isPending && remove.variables === plan.id}
+                      onClick={() => confirm({ title: 'حذف الخطة',
+                        description: `هل تريد حذف «${plan.nameAr || plan.name}»؟ الخطة غير المرتبطة تُحذف نهائيًا. إن كانت مرتبطة بترخيص أو اشتراك أو دفعة، تُؤرشف وتُزال من البيع مع بقاء حقوق العملاء وسجلاتهم.`,
+                        confirmLabel: 'حذف الخطة', variant: 'destructive' }, () => remove.mutate(plan.id))}>
+                      <Trash2 /> حذف
+                    </Button>
+                  )}
                 </div>
               )}
             </Card>

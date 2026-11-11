@@ -5,8 +5,10 @@ import { AuditService } from '../common/audit/audit.service';
 import { LicenseCryptoService, type LicensePayload } from '../common/crypto/license-crypto.service';
 import { SecurityService } from '../common/crypto/security.service';
 import { PrismaService } from '../common/prisma/prisma.service';
+import { supportsPmsEntitlements } from '../plans/pms-client-version';
 import { normalizeLicenseKey } from './license-key.util';
 import { LicenseStatusService } from './license-status.service';
+import { pmsLeaseWindow } from './pms-license-policy';
 
 export interface ValidateRequest {
   licenseKey: string;
@@ -62,22 +64,24 @@ export class LicenseValidationService {
     const license = await this.prisma.license.findUnique({
       where: { licenseKey: normalizeLicenseKey(input.licenseKey) },
       include: { customer: { select: { status: true, deletedAt: true } },
+        plan: { select: { enforceEntitlements: true, key: true } },
         devices: { where: { deviceFingerprint: fingerprint }, select: { status: true }, take: 1 } },
     });
     const denied = (status: ValidationStatus, message: string) => ({ valid: false, status, message });
     if (!license) return denied(ValidationStatus.INVALID, 'License key not found');
+    if(license.plan?.enforceEntitlements && !supportsPmsEntitlements(input.appVersion))return denied(ValidationStatus.INVALID,'هذه الخطة تحتاج PMS 1.4.0 أو أحدث. نزّل التحديث من بوابة التراخيص.');
     if (license.customer.deletedAt || license.customer.status !== 'ACTIVE')
       return denied(ValidationStatus.SUSPENDED, 'تم إيقاف حساب العميل. تواصل مع مسؤول التراخيص.');
     const derived = this.statusService.derive(license);
     if (derived.status === LicenseStatus.REVOKED) return denied(ValidationStatus.REVOKED, 'تم إلغاء الترخيص.');
     if (derived.status === LicenseStatus.SUSPENDED) return denied(ValidationStatus.SUSPENDED, 'تم إيقاف الترخيص.');
-    if (derived.status === LicenseStatus.EXPIRED || (license.expiresAt && license.expiresAt.getTime() < Date.now()))
+    if (supportsPmsEntitlements(input.appVersion) ? pmsLeaseWindow(license.expiresAt).expired : derived.status === LicenseStatus.EXPIRED || (license.expiresAt && license.expiresAt.getTime() < Date.now()))
       return denied(ValidationStatus.EXPIRED, 'انتهت صلاحية الترخيص.');
     const device = license.devices[0];
     if (!device) return denied(ValidationStatus.INVALID, 'يجب تفعيل الترخيص على هذا الجهاز أولًا.');
     if (device.status === DeviceStatus.REVOKED || device.status === DeviceStatus.BLOCKED)
       return denied(ValidationStatus.REVOKED, 'تم إيقاف الترخيص على هذا الجهاز.');
-    return { valid: true, status: ValidationStatus.SUCCESS, message: 'License is valid' };
+    return { valid: true, version: license.version, status: ValidationStatus.SUCCESS, message: 'License is valid' };
   }
 
   async refreshSettings(): Promise<void> {
@@ -164,6 +168,8 @@ export class LicenseValidationService {
       return fail(ValidationStatus.INVALID, 'License key not found');
     }
 
+    if(license.plan?.enforceEntitlements && !supportsPmsEntitlements(input.appVersion))return fail(ValidationStatus.INVALID,'هذه الخطة تحتاج PMS 1.4.0 أو أحدث. نزّل التحديث من بوابة التراخيص.');
+
     // Account suspension applies to every licence, even if the licence itself
     // remains ACTIVE. Keeping its status intact makes account reactivation reversible.
     if (license.customer.deletedAt || license.customer.status !== 'ACTIVE') {
@@ -190,7 +196,7 @@ export class LicenseValidationService {
 
     // Server-side status derivation is authoritative (business rule 12).
     const derived = this.statusService.derive(license);
-    if (derived.status === LicenseStatus.EXPIRED) {
+    if (supportsPmsEntitlements(input.appVersion) ? pmsLeaseWindow(license.expiresAt).expired : derived.status === LicenseStatus.EXPIRED) {
       return fail(ValidationStatus.EXPIRED, 'License has expired', {
         licenseId: license.id,
         customerId: license.customerId,
@@ -221,30 +227,20 @@ export class LicenseValidationService {
     let deviceId = existingDevice?.id;
 
     if (!existingDevice) {
-      // Enforce the device limit server-side; the client can never widen it.
-      const activeDevices = await this.prisma.device.count({
-        where: { licenseId: license.id, status: DeviceStatus.ACTIVE },
+      const created = await this.prisma.$transaction(async tx => {
+        await tx.$queryRaw`SELECT id FROM licenses WHERE id=${license.id} FOR UPDATE`;
+        const latest = await tx.license.findUnique({where:{id:license.id}});
+        if (!latest || latest.status === LicenseStatus.REVOKED || latest.status === LicenseStatus.SUSPENDED) return null;
+        const concurrent = await tx.device.findUnique({where:{licenseId_deviceFingerprint:{licenseId:license.id,deviceFingerprint:fingerprint}}});
+        if (concurrent) return concurrent.status === DeviceStatus.ACTIVE ? concurrent : null;
+        if (await tx.device.count({where:{licenseId:license.id,status:DeviceStatus.ACTIVE}}) >= latest.maxDevices) return null;
+        return tx.device.create({data:{
+          licenseId:license.id,deviceFingerprint:fingerprint,deviceName:input.deviceName??null,platform:input.platform??null,
+          osVersion:input.osVersion??null,appVersion:input.appVersion??null,status:DeviceStatus.ACTIVE,lastIp:ip??null,
+          lastSeenAt:new Date(),lastValidationAt:new Date()
+        }});
       });
-      if (activeDevices >= license.maxDevices) {
-        return fail(ValidationStatus.DEVICE_LIMIT, `Device limit reached (${license.maxDevices} devices)`, {
-          licenseId: license.id,
-          customerId: license.customerId,
-        });
-      }
-      const created = await this.prisma.device.create({
-        data: {
-          licenseId: license.id,
-          deviceFingerprint: fingerprint,
-          deviceName: input.deviceName ?? null,
-          platform: input.platform ?? null,
-          osVersion: input.osVersion ?? null,
-          appVersion: input.appVersion ?? null,
-          status: DeviceStatus.ACTIVE,
-          lastIp: ip ?? null,
-          lastSeenAt: new Date(),
-          lastValidationAt: new Date(),
-        },
-      });
+      if (!created) return fail(ValidationStatus.DEVICE_LIMIT, 'Device limit reached or license/device state changed.', {licenseId:license.id,customerId:license.customerId});
       deviceId = created.id;
     } else {
       await this.prisma.device.update({
@@ -263,11 +259,12 @@ export class LicenseValidationService {
 
     // The client may run offline for the validation interval, capped by the
     // license expiry itself.
-    const intervalMs = this.validationIntervalHours * 3_600_000;
+    const pms = supportsPmsEntitlements(input.appVersion);
+    const intervalMs = (pms ? 168 : this.validationIntervalHours) * 3_600_000;
     const licenceBound = license.expiresAt
       ? Math.min(license.expiresAt.getTime(), Date.now() + intervalMs)
       : Date.now() + intervalMs;
-    const validUntil = new Date(licenceBound);
+    const validUntil = new Date(pms ? pmsLeaseWindow(license.expiresAt).nextCheckAt : licenceBound);
 
     const payload: LicensePayload = {
       licenseKey: license.licenseKey,
@@ -306,14 +303,18 @@ export class LicenseValidationService {
     const release = await this.resolveRelease(input.appVersion, input.platform);
 
     const checkedAt = Date.now();
-    const nextCheckAt = Math.min(checkedAt + intervalMs,
+    const nextCheckAt = pms ? pmsLeaseWindow(license.expiresAt, checkedAt).nextCheckAt : Math.min(checkedAt + intervalMs,
       license.expiresAt?.getTime() ?? Number.MAX_SAFE_INTEGER);
-    const offlineUntil = Math.min(nextCheckAt + this.gracePeriodDays * 86_400_000,
+    const offlineUntil = pms ? pmsLeaseWindow(license.expiresAt, checkedAt).offlineUntil : Math.min(nextCheckAt + this.gracePeriodDays * 86_400_000,
       license.expiresAt?.getTime() ?? Number.MAX_SAFE_INTEGER);
     const lease = this.crypto.signDocument({ purpose: 'desktop-offline-lease',
       licenseKey: license.licenseKey, deviceFingerprint: input.deviceFingerprint,
       validatedAt: new Date(checkedAt).toISOString(), nextCheckAt: new Date(nextCheckAt).toISOString(),
-      offlineUntil: new Date(offlineUntil).toISOString(), version: license.version });
+      offlineUntil: new Date(offlineUntil).toISOString(), version: license.version,
+        entitlements: { schemaVersion: 1, enforced: license.plan.enforceEntitlements,
+          planKey: license.plan.key, planName: license.plan.nameAr ?? license.plan.name,
+          features: payload.features, maxUsers: license.plan.maxUsers,
+          maxBranches: license.plan.maxBranches, maxWarehouses: license.plan.maxWarehouses } });
 
     return {
       valid: true,

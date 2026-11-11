@@ -74,6 +74,8 @@ export class CustomerPortalService {
       });
     }
 
+    const selectedPlan = dto.planKey ? await this.prisma.plan.findFirst({ where: { key: dto.planKey, status: 'ACTIVE', price: { gt: 0 }, enforceEntitlements: true } }) : null;
+    if (dto.planKey && !selectedPlan) throw new BadRequestException('The selected plan is not available.');
     const customer = await this.prisma.customer.create({
       data: {
         email,
@@ -81,6 +83,7 @@ export class CustomerPortalService {
         company: dto.company?.trim() || null,
         phone: dto.phone?.trim() || null,
         country: dto.country?.trim() || null,
+        requestedPlanId: selectedPlan?.id,
         passwordHash: await this.security.hashPassword(dto.password),
         // Never taken from the request: registering must not grant a download.
         downloadEnabled: false,
@@ -229,6 +232,7 @@ export class CustomerPortalService {
       phone: c.phone,
       country: c.country,
       status: c.status,
+      requestedPlanId: c.requestedPlanId,
       downloadEnabled: c.downloadEnabled,
       lastLoginAt: c.lastLoginAt,
       createdAt: c.createdAt,
@@ -360,7 +364,7 @@ export class CustomerPortalService {
    */
   async catalogue() {
     const plans = await this.prisma.plan.findMany({
-      where: { status: 'ACTIVE' },
+      where: { status: 'ACTIVE', price: { gt: 0 }, enforceEntitlements: true },
       orderBy: { sortOrder: 'asc' },
       select: {
         id: true,
@@ -373,6 +377,12 @@ export class CustomerPortalService {
         trialDays: true,
         maxDevices: true,
         description: true,
+        setupFee: true,
+        enforceEntitlements: true,
+        maxUsers: true,
+        maxBranches: true,
+        maxWarehouses: true,
+        features: { select: { feature: { select: { key: true, name: true, nameAr: true } } } },
       },
     });
     return { plans };
@@ -408,18 +418,26 @@ export class CustomerPortalService {
 
     const plan = await this.prisma.plan.findUnique({
       where: { id: input.planId },
-      select: { id: true, key: true, name: true, status: true },
+      select: { id: true, key: true, name: true, status: true, price: true, setupFee: true, currency: true, enforceEntitlements: true },
     });
-    if (!plan || plan.status !== 'ACTIVE') {
+    if (!plan || plan.status !== 'ACTIVE' || !plan.enforceEntitlements) {
       throw new BadRequestException('The selected plan is not available.');
     }
 
+    if (plan.price <= 0) throw new BadRequestException('The selected plan is not priced.');
+    const initialSetup = !customer.downloadEnabled ? plan.setupFee : 0;
+    if (input.amount !== plan.price + initialSetup) throw new BadRequestException('The price changed. Refresh the catalogue before submitting payment.');
+    if (input.subscriptionId) {
+      const subscription = await this.prisma.subscription.findFirst({ where: { id: input.subscriptionId, customerId, planId: plan.id } });
+      if (!subscription) throw new BadRequestException('The subscription does not belong to this customer and plan.');
+    }
     const payment = await this.prisma.payment.create({
       data: {
         customerId,
+        planId: plan.id,
         subscriptionId: input.subscriptionId ?? null,
         amount: input.amount,
-        currency: 'EGP',
+        currency: plan.currency,
         method: 'BANK_TRANSFER',
         status: 'PENDING',
         notes: input.notes?.trim() || null,
@@ -450,6 +468,7 @@ export class CustomerPortalService {
       orderBy: { createdAt: 'desc' },
       take: 50,
       select: {
+        plan: { select: { name: true, nameAr: true, billingInterval: true } },
         id: true,
         amount: true,
         currency: true,

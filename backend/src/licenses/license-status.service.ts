@@ -62,7 +62,7 @@ export class LicenseStatusService {
    * Admin-forced states always win.
    */
   derive(
-    license: { status: LicenseStatus; expiresAt: Date | null; isTrial: boolean; startsAt: Date },
+    license: { status: LicenseStatus; expiresAt: Date | null; isTrial: boolean; startsAt: Date; plan?: { key: string } },
     now = new Date(),
   ): LicenseStatusContext {
     if (license.status === LicenseStatus.SUSPENDED) {
@@ -73,11 +73,12 @@ export class LicenseStatusService {
     }
 
     if (license.expiresAt && now > license.expiresAt) {
-      const graceEnds = new Date(license.expiresAt.getTime() + this.graceDays * 86_400_000);
+      const graceDays = license.plan?.key.startsWith('PMS_') ? 14 : this.graceDays;
+      const graceEnds = new Date(license.expiresAt.getTime() + graceDays * 86_400_000);
       if (now <= graceEnds) {
         return {
           status: LicenseStatus.EXPIRING,
-          reason: `Expired but within the ${this.graceDays}-day grace period`,
+          reason: `Expired but within the ${graceDays}-day grace period`,
         };
       }
       return { status: LicenseStatus.EXPIRED, reason: 'License period has ended' };
@@ -102,7 +103,7 @@ export class LicenseStatusService {
    * Expired licenses are transitioned, never deleted (business rule 1).
    */
   async reconcileLicense(licenseId: number, now = new Date()): Promise<LicenseStatus> {
-    const license = await this.prisma.license.findUniqueOrThrow({ where: { id: licenseId } });
+    const license = await this.prisma.license.findUniqueOrThrow({ where: { id: licenseId }, include: { plan: { select: { key: true } } } });
     const derived = this.derive(license, now);
     if (derived.status !== license.status) {
       await this.prisma.license.update({ where: { id: licenseId }, data: { status: derived.status } });
@@ -117,7 +118,7 @@ export class LicenseStatusService {
   async reconcileAllLicenses(now = new Date()): Promise<number[]> {
     const licenses = await this.prisma.license.findMany({
       where: { status: { notIn: [LicenseStatus.REVOKED, LicenseStatus.SUSPENDED] } },
-      select: { id: true, status: true, expiresAt: true, isTrial: true, startsAt: true },
+      select: { id: true, status: true, expiresAt: true, isTrial: true, startsAt: true, plan: { select: { key: true } } },
     });
 
     const changed: number[] = [];

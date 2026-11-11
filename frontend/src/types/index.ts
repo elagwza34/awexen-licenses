@@ -70,6 +70,11 @@ export interface Feature {
 }
 
 export interface Plan {
+  setupFee: number;
+  enforceEntitlements: boolean;
+  maxUsers: number;
+  maxBranches: number;
+  maxWarehouses: number;
   id: number;
   key: string;
   name: string;
@@ -107,6 +112,7 @@ export interface Subscription {
 }
 
 export interface Payment {
+  planId?: number | null;
   id: number;
   customerId: number;
   subscriptionId: number | null;

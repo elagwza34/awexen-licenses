@@ -340,6 +340,22 @@ model LoginAttempt {
 // FEATURES & PLANS
 // ===========================================================================
 
+model PmsInstallation {
+  licenseId Int @id @map("license_id")
+  license License @relation(fields: [licenseId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  installationId String @unique @map("installation_id") @db.Uuid
+  serverFingerprint String @map("server_fingerprint") @db.VarChar(128)
+  deviceKeys PmsDeviceKey[]
+  @@map("pms_installations")
+}
+model PmsDeviceKey {
+  deviceId Int @id @map("device_id")
+  device Device @relation(fields: [deviceId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  installationId String @map("installation_id") @db.Uuid
+  installation PmsInstallation @relation(fields: [installationId], references: [installationId], onDelete: Restrict, onUpdate: Cascade)
+  publicKeyHash String @map("public_key_hash") @db.VarChar(64)
+  @@map("pms_device_keys")
+}
 model Feature {
   id          Int             @id @default(autoincrement())
   /// Stable machine key, e.g. "MULTI_WAREHOUSE" — referenced by customer apps.
@@ -369,11 +385,18 @@ model Plan {
   billingInterval BillingInterval @default(MONTHLY) @map("billing_interval")
   trialDays       Int             @default(0) @map("trial_days")
   maxDevices      Int             @default(1) @map("max_devices")
+  enforceEntitlements Boolean @default(false) @map("enforce_entitlements")
+  maxUsers Int @default(2) @map("max_users")
+  maxBranches Int @default(1) @map("max_branches")
+  maxWarehouses Int @default(1) @map("max_warehouses")
   sortOrder       Int             @default(0) @map("sort_order")
   isPopular       Boolean         @default(false) @map("is_popular")
   status          PlanStatus      @default(ACTIVE)
   isTrialPlan     Boolean         @default(false) @map("is_trial_plan")
 
+  setupFee Int @default(0) @map("setup_fee")
+  requestedBy Customer[] @relation("RequestedPlan")
+  checkoutPayments Payment[]
   features      PlanFeature[]
   subscriptions Subscription[]
   licenses      License[]
@@ -433,6 +456,8 @@ model Customer {
   /// Reference for support, e.g. "whatsapp: +20…, received 2026-09-26".
   paymentReference String? @map("payment_reference") @db.VarChar(200)
 
+  requestedPlanId Int? @map("requested_plan_id")
+  requestedPlan Plan? @relation("RequestedPlan", fields: [requestedPlanId], references: [id], onDelete: SetNull)
   subscriptions Subscription[]
   licenses      License[]
   payments      Payment[]
@@ -516,6 +541,7 @@ model Subscription {
 // ===========================================================================
 
 model License {
+  pmsInstallation PmsInstallation?
   id             Int           @id @default(autoincrement())
   /// Human-facing key, e.g. "PROD-7F3A-92KD-0XLM-QP4E". Unique forever —
   /// revoked keys are never reused or deleted.
@@ -565,6 +591,7 @@ model License {
 }
 
 model Device {
+  pmsKey PmsDeviceKey?
   id                Int          @id @default(autoincrement())
   licenseId         Int
   license           License      @relation(fields: [licenseId], references: [id], onDelete: Cascade)
@@ -650,6 +677,8 @@ model LicenseValidation {
 // ===========================================================================
 
 model Payment {
+  planId Int? @map("plan_id")
+  plan Plan? @relation(fields: [planId], references: [id], onDelete: Restrict)
   id             Int           @id @default(autoincrement())
   customerId     Int
   customer       Customer      @relation(fields: [customerId], references: [id], onDelete: Restrict)

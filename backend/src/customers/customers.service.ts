@@ -65,6 +65,7 @@ export class CustomersService {
     const customer = await this.prisma.customer.findFirst({
       where: { id, deletedAt: null },
       include: {
+        requestedPlan: { select: { id: true, key: true, name: true, nameAr: true, price: true, setupFee: true, currency: true, billingInterval: true } },
         subscriptions: {
           orderBy: { createdAt: 'desc' },
           include: { plan: true, licenses: { select: { id: true, licenseKey: true, status: true } } },

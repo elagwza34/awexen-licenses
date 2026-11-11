@@ -68,6 +68,7 @@ interface TicketRow {
 }
 
 export interface CustomerDetail extends Customer {
+  requestedPlan?: { name: string; nameAr: string | null; billingInterval: string } | null;
   subscriptions: Subscription[];
   licenses: LicenseRow[];
   payments: PaymentRow[];
@@ -132,6 +133,7 @@ export function CustomerDetailPage() {
               <CustomerStatusBadge value={customer.status} showCode />
             </div>
             <p className="text-sm text-muted-foreground">{customer.name}</p>
+            {customer.requestedPlan && <p className="mt-2 text-sm font-medium text-primary">الخطة المختارة عند التسجيل: {customer.requestedPlan.nameAr ?? customer.requestedPlan.name} · {customer.requestedPlan.billingInterval === 'YEARLY' ? 'سنوي' : 'شهري'}</p>}
             <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
               <span className="ltr flex items-center gap-1">
                 <Building2 className="h-3.5 w-3.5" />ID: {customer.id}

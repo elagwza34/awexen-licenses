@@ -575,8 +575,10 @@ export class PaymentsService {
    */
   private async resolvePlanFor(payment: {
     amount: number;
+    planId?: number | null;
     subscription: { planId: number } | null;
   }): Promise<number | null> {
+    if (payment.planId) return payment.planId;
     if (payment.subscription) return payment.subscription.planId;
 
     const matches = await this.prisma.plan.findMany({

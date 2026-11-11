@@ -16,6 +16,11 @@ import {
 } from 'class-validator';
 
 export class CreatePlanDto {
+  @IsOptional() @Type(() => Number) @IsInt() @Min(0) @Max(2147483647) setupFee?: number;
+  @IsOptional() @IsBoolean() enforceEntitlements?: boolean;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(10000) maxUsers?: number;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(1000) maxBranches?: number;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(10000) maxWarehouses?: number;
   @ApiProperty({ example: 'PROFESSIONAL' })
   @IsString()
   @Matches(/^[A-Z0-9_]+$/, { message: 'Key must be uppercase letters, digits and underscores' })

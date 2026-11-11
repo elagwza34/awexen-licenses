@@ -1,7 +1,8 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { AuditEntity, SettingType } from '@prisma/client';
-import { IsBoolean, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
+import { ArrayMinSize, IsArray, IsBoolean, IsDefined, IsNotEmpty, IsOptional, IsString, ValidateNested } from 'class-validator';
+import { Type } from 'class-transformer';
 import type { Request } from 'express';
 import { AuditService, type AuditActor } from '../common/audit/audit.service';
 import { PrismaService } from '../common/prisma/prisma.service';
@@ -9,7 +10,7 @@ import { LicenseStatusService } from '../licenses/license-status.service';
 import { LicenseValidationService } from '../licenses/license-validation.service';
 
 export class UpdateSettingDto {
-  @ApiProperty() value!: string | number | boolean | object | null;
+  @ApiProperty() @IsDefined() value!: string | number | boolean | object;
 
   @ApiPropertyOptional() @IsOptional() @IsString()
   label?: string;
@@ -27,9 +28,14 @@ export class UpdateSettingDto {
   isSensitive?: boolean;
 }
 
+export class SettingUpdateItemDto extends UpdateSettingDto {
+  @IsString() @IsNotEmpty() key!: string;
+}
+
 export class BulkUpdateSettingsDto {
-  @ApiProperty({ type: [UpdateSettingDto] })
-  settings!: Array<UpdateSettingDto & { key: string }>;
+  @ApiProperty({ type: [SettingUpdateItemDto] })
+  @IsArray() @ArrayMinSize(1) @ValidateNested({ each: true }) @Type(() => SettingUpdateItemDto)
+  settings!: SettingUpdateItemDto[];
 }
 
 @Injectable()
@@ -132,6 +138,8 @@ export class SettingsService {
   private coerce(type: SettingType, value: unknown, key: string): string | number | boolean | object {
     switch (type) {
       case SettingType.NUMBER: {
+        if (typeof value !== 'number' && !(typeof value === 'string' && value.trim() !== ''))
+          throw new BadRequestException(`${key} must be a number`);
         const num = Number(value);
         if (!Number.isFinite(num)) throw new BadRequestException(`${key} must be a number`);
         if (num < 0) throw new BadRequestException(`${key} cannot be negative`);

@@ -1,9 +1,11 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
-import { Link } from 'react-router-dom';
-import { AlertCircle, CheckCircle2, Eye, EyeOff, KeyRound } from 'lucide-react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { setPortalToken, type PortalPlan } from '@/lib/portal-api';
+import { money } from '@/lib/portal-format';
+import { AlertCircle, Eye, EyeOff, KeyRound } from 'lucide-react';
 import { z } from 'zod';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -51,7 +53,12 @@ interface RegisterResponse {
 }
 
 export function CustomerRegisterPage() {
-  const [done, setDone] = useState<string | null>(null);
+  const navigate = useNavigate();
+  const [search] = useSearchParams();
+  const planKey = search.get('plan') || undefined;
+  const catalogue = useQuery({ queryKey: ['public', 'plans'], queryFn: () => api.get<{plans: PortalPlan[]}>('/portal/public-catalogue'), enabled: Boolean(planKey) });
+  const selected = catalogue.data?.plans.find(p => p.key === planKey);
+
 
   const {
     register,
@@ -73,6 +80,7 @@ export function CustomerRegisterPage() {
   const mutation = useMutation({
     mutationFn: (values: RegisterValues) =>
       api.post<RegisterResponse>('/portal/register', {
+        planKey,
         email: values.email,
         name: values.name,
         company: values.company || undefined,
@@ -80,13 +88,17 @@ export function CustomerRegisterPage() {
         country: values.country || undefined,
         password: values.password,
       }),
-    onSuccess: (result) => setDone(result.customer.email),
+    onSuccess: (result) => {
+      setPortalToken(result.accessToken);
+      navigate('/portal/subscription', { replace: true });
+    },
   });
 
-  if (done) return <RegisteredNotice email={done} />;
+
 
   return (
     <RegisterForm
+      selection={selected ? `${selected.nameAr ?? selected.name} · ${money(selected.price, selected.currency)} ${selected.billingInterval === 'YEARLY' ? 'سنوياً' : 'شهرياً'} + ${money(selected.setupFee, selected.currency)} تفعيل لأول مرة` : planKey ? (catalogue.isError ? 'تعذّر تحميل الخطة. أعد تحميل الصفحة للمحاولة.' : catalogue.data ? 'هذه الخطة غير متاحة. اختر خطة من صفحة الموقع.' : 'جاري مراجعة الخطة المختارة…') : undefined}
       register={register}
       handleSubmit={handleSubmit}
       errors={errors}
@@ -98,7 +110,7 @@ export function CustomerRegisterPage() {
             : 'تعذّر إنشاء الحساب. حاول مرة أخرى.'
           : null
       }
-      pending={mutation.isPending}
+      pending={mutation.isPending || Boolean(planKey && !selected)}
     />
   );
 }
@@ -110,9 +122,10 @@ type RegisterProps = {
   onSubmit: (values: RegisterValues) => void;
   error: string | null;
   pending: boolean;
+  selection?: string;
 };
 
-function RegisterForm({ register, handleSubmit, errors, onSubmit, error, pending }: RegisterProps) {
+function RegisterForm({ register, handleSubmit, errors, onSubmit, error, pending, selection }: RegisterProps) {
   return (
     <div className="flex min-h-screen items-center justify-center bg-muted/40 p-4">
       <div className="w-full max-w-lg">
@@ -134,6 +147,7 @@ function RegisterForm({ register, handleSubmit, errors, onSubmit, error, pending
             </CardDescription>
           </CardHeader>
           <CardContent>
+            {selection && <p className="mb-4 rounded-lg border border-primary/20 bg-primary/5 p-3 text-sm" role="status">{selection}</p>}
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
               {error && (
                 <div
@@ -273,42 +287,6 @@ function PasswordFields({
           <p className="text-xs text-destructive">{errors.confirmPassword.message}</p>
         )}
       </div>
-    </div>
-  );
-}
-
-function RegisteredNotice({ email }: { email: string }) {
-  return (
-    <div className="flex min-h-screen items-center justify-center bg-muted/40 p-4">
-      <Card className="w-full max-w-md">
-        <CardHeader className="text-center">
-          <div className="mx-auto mb-2 flex h-14 w-14 items-center justify-center rounded-2xl bg-green-500/10">
-            <CheckCircle2 className="h-7 w-7 text-green-600" />
-          </div>
-          <CardTitle>تم إنشاء حسابك</CardTitle>
-          <CardDescription>
-            حسابك جاهز على <span dir="ltr">{email}</span>، وهو الآن مسجّل في نظامنا.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="rounded-md border border-amber-500/30 bg-amber-500/5 p-3 text-sm">
-            <p className="font-medium">الخطوات التالية</p>
-            <ol className="mt-2 list-decimal space-y-1 pe-4 text-muted-foreground">
-              <li>أكمل الدفع و/أو تواصل معنا لتأكيده.</li>
-              <li>سنرسل لك كود الترخيص على بريدك الإلكتروني.</li>
-              <li>
-                سجّل الدخول لتحميل النسخة:
-                <Link to="/portal/login" className="ms-1 font-medium text-primary underline">
-                  تسجيل الدخول
-                </Link>
-              </li>
-            </ol>
-          </div>
-          <p className="text-center text-xs text-muted-foreground">
-            التحميل يفتح بعد تأكيد الدفع فقط.
-          </p>
-        </CardContent>
-      </Card>
     </div>
   );
 }

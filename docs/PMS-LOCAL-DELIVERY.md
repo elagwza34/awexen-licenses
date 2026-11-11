@@ -1,9 +1,11 @@
 # PMS ERP Local
 
+Current installer: **1.4.2**, with [Awexen icons](PMS-BRANDING-1.4.2.md) and the [local login fix and password eye](PMS-LOGIN-1.4.1.md). [Shared pricing, customer checkout and plan limits](PMS-PLANS-AND-CHECKOUT.md) describes the deployed flow; older release sections below are historical snapshots.
+
 ## Customer workflow
 
-1. Register/sign in at `https://licenses.awexen.com/portal/login`.
-2. Choose a plan and send a payment request with its receipt.
+1. Choose a monthly/yearly plan at `https://awexen.com/pms` and register through its button. The selected plan is saved automatically and the customer enters their portal.
+2. Review the selected plan and initial setup fee, then send a payment request with its receipt. Existing accounts can sign in at `https://licenses.awexen.com/portal/login`.
 3. The owner confirms the payment. The existing approval transaction creates the licence,
    links it to the customer and enables download. Repeating approval must not issue another licence.
 4. The customer opens **Download** and installs **PMS ERP Local** on Windows x64.
@@ -131,3 +133,42 @@ and full financial reports are not claims that those modules have working deskto
   confirmation timeout was retried using the scheduler's own previous-run timestamp.
 - The complete public download matched the local SHA-256; latest-release API reports 1.1.1.
   Existing customer computers must install this update for fast suspension behavior.
+
+## Business modules — 1.2.0
+
+- Completed the repository's business navigation: branches/warehouses, stock opening and
+  adjustment/damage/transfers, suppliers/customers/settlements, purchase approval and partial
+  receipt/returns, sales drafts/POS/split tender/credit/collections/refunds/voids,
+  employees/user linkage/attendance, dashboard and reports with Excel and native Windows printing.
+- No DevExpress or paid PDF runtime. PDF output uses Microsoft Print to PDF. Actual printer
+  hardware and native file-picker interactions remain manual checks.
+- IDs are explicitly application-generated, so new child rows in edited documents/role graphs
+  insert correctly. Version tokens protect all entities; duplicate stock/default/open-attendance
+  constraints protect races. Idempotency receipts protect new financial/stock operations.
+- JWT validation checks current account status/password stamp and role grants on each request.
+  Temporary staff passwords must be changed before business routes can be used. Password changes
+  also revoke refresh sessions. Owner portal identity and licence/offline policies are preserved.
+- Final automated results: **209 unit + 133 desktop + 13 integration = 355 passed**.
+  PostgreSQL tests use disposable databases and cover reconciliation, legacy upgrade, partial
+  purchases, draft editing, split credit sale, collections, full/partial return, void,
+  stock movement/concurrency, attendance, report/export and HTTP access revocation.
+- Both schema migrations are packaged. Legacy customer/supplier balances and completed sales
+  are carried forward without resetting them. Conflicting duplicate stock/default/attendance
+  data or ambiguous legacy partial returns stop the migration for reconciliation.
+- Local upgrade to 1.2.0 passed: database recovery identity and all business table record counts
+  were preserved, backup task succeeded and local API recovered after service restart.
+  Evidence: `.diagnostics/operations-install.result.json`.
+- Installer size: **119,491,850 bytes**. SHA-256:
+  `f3db08ae59fdf80ea8f78488b75f044585e554f6028773914ba96e2c8b1c8ddb`.
+- This is the operational PMS scope, not a payroll engine or statutory accounting general ledger.
+  Inventory valuation is current; top-product reports for invoices in a date range reflect all
+  their returns up to the report run. Profit is gross merchandise margin, not net business profit.
+- Arabic operating guide: `PMS-1.2-USER-GUIDE.ar.md`.
+- Release ID **3**, build **1200**, is **PUBLISHED**. The latest-release endpoint returns 1.2.0;
+  1.1.1 is deprecated and its original URL remains usable. The full public 1.2.0 download
+  matched the SHA-256 above and all three portal pages and their JavaScript assets returned 200.
+- Previous 1.1.0/1.1.1 executable URLs had fallen back to SPA HTML and were restored from
+  their original local artifacts. Uploads exposed partial files while in progress; targeted
+  Cloudflare cache purges removed those incomplete cached responses. Before future front-end
+  deployments, preserve the download directory, and verify completed artifacts before publishing
+  or requesting their public URLs. This release did not overwrite the frontend application.

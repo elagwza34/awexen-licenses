@@ -1,9 +1,10 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { AuditEntity, PlanStatus, Prisma, SubscriptionStatus } from '@prisma/client';
 import type { Request } from 'express';
 import { AuditService, type AuditActor } from '../common/audit/audit.service';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { CreatePlanDto, UpdatePlanDto } from './dto/plan.dto';
+import { validatePmsPolicy } from './pms-plan-policy';
 
 @Injectable()
 export class PlansService {
@@ -52,7 +53,22 @@ export class PlansService {
     return { ...plan, featureKeys: plan.features.map((pf) => pf.feature.key) };
   }
 
+  private async validatePolicy(dto: CreatePlanDto | UpdatePlanDto,existing?:any) {
+    if(!(dto.enforceEntitlements ?? existing?.enforceEntitlements ?? true)) {
+      // Legacy plans may retain metadata-only edits, but selected features must
+      // never be advertised or saved as an unrestricted PMS subscription.
+      if(!existing || existing.enforceEntitlements || dto.featureIds !== undefined)
+        throw new BadRequestException('يجب تطبيق مميزات وحدود الخطة داخل PMS عند إنشاء خطة أو تعديل مميزاتها.');
+      return;
+    }
+    if((dto.status??existing?.status??'ACTIVE')==='ACTIVE'&&(dto.price??existing?.price??0)<=0&&!(dto.isTrialPlan??existing?.isTrialPlan))throw new BadRequestException('حدد سعر الخطة قبل تفعيلها للبيع، أو عرّفها صراحةً كخطة تجربة.');
+    const features=dto.featureIds ? await this.prisma.feature.findMany({where:{id:{in:dto.featureIds}}}) : existing?.features?.map((x:any)=>x.feature) ?? [];
+    if(dto.featureIds && (features.length!==new Set(dto.featureIds).size||new Set(dto.featureIds).size!==dto.featureIds.length))throw new BadRequestException('اختر مميزات موجودة بدون تكرار.');
+    const error=validatePmsPolicy(features.map((x:any)=>x.key),{maxBranches:dto.maxBranches??existing?.maxBranches??1,maxWarehouses:dto.maxWarehouses??existing?.maxWarehouses??1});
+    if(error)throw new BadRequestException(error);
+  }
   async create(dto: CreatePlanDto, actor: AuditActor, req: Request) {
+    await this.validatePolicy(dto);
     const existing = await this.prisma.plan.findUnique({ where: { key: dto.key } });
     if (existing) throw new ConflictException('A plan with this key already exists');
 
@@ -62,6 +78,7 @@ export class PlansService {
       const created = await tx.plan.create({
         data: {
           ...planData,
+          enforceEntitlements: dto.enforceEntitlements ?? true,
           ...(featureIds?.length
             ? { features: { create: featureIds.map((featureId) => ({ featureId })) } }
             : {}),
@@ -90,6 +107,7 @@ export class PlansService {
       include: { features: { include: { feature: true } } },
     });
 
+    await this.validatePolicy(dto,existing);
     if (dto.key && dto.key !== existing.key) {
       const activeLicenses = await this.prisma.license.count({ where: { planId: id } });
       if (activeLicenses > 0) {
@@ -117,6 +135,9 @@ export class PlansService {
         include: { features: { include: { feature: true } } },
       });
 
+      if (['featureIds','enforceEntitlements','maxUsers','maxBranches','maxWarehouses'].some(key => Object.prototype.hasOwnProperty.call(dto,key))) {
+        await tx.license.updateMany({where:{planId:id},data:{version:{increment:1}}});
+      }
       await this.audit.record(
         {
           action: 'plan.updated',
@@ -136,20 +157,20 @@ export class PlansService {
   }
 
   /**
-   * Plans are archived, never deleted: existing subscriptions and licences must
-   * keep resolving to a real plan.
+   * Remove any plan from sale; preserve every historical financial/license link.
    */
   async remove(id: number, actor: AuditActor, req: Request) {
-    const plan = await this.prisma.plan.findUniqueOrThrow({ where: { id } });
-    const [licenses, subscriptions] = await Promise.all([
-      this.prisma.license.count({ where: { planId: id } }),
-      this.prisma.subscription.count({
-        where: { planId: id, status: { in: [SubscriptionStatus.ACTIVE, SubscriptionStatus.TRIAL] } },
-      }),
-    ]);
-
-    if (licenses > 0 || subscriptions > 0) {
-      const archived = await this.prisma.$transaction(async (tx) => {
+    return this.prisma.$transaction(async (tx) => {
+      // Serialize deletion with foreign-key references created by checkout or
+      // enrollment; counts and mutation must observe the same protected plan.
+      await tx.$queryRaw`SELECT id FROM plans WHERE id=${id} FOR UPDATE`;
+      const plan = await tx.plan.findUniqueOrThrow({ where: { id } });
+      const [licenses, subscriptions, payments] = await Promise.all([
+        tx.license.count({ where: { planId: id } }),
+        tx.subscription.count({ where: { planId: id } }),
+        tx.payment.count({ where: { planId: id } }),
+      ]);
+      if (licenses > 0 || subscriptions > 0 || payments > 0) {
         const updated = await tx.plan.update({ where: { id }, data: { status: PlanStatus.ARCHIVED } });
         await this.audit.record(
           {
@@ -158,31 +179,23 @@ export class PlansService {
             entityId: id,
             oldValue: { status: plan.status },
             newValue: { status: PlanStatus.ARCHIVED },
-            metadata: { licenses, subscriptions },
+            metadata: { licenses, subscriptions, payments },
             tx,
           },
           actor,
           req,
         );
-        return updated;
-      });
-      return {
-        deleted: false,
-        archived: true,
-        plan: archived,
-        message: 'Plan is in use, so it was archived instead of deleted.',
-      };
-    }
-
-    await this.prisma.$transaction(async (tx) => {
+        return { deleted: false, archived: true, plan: updated,
+          message: 'Plan removed from sale; historical subscriptions, payments and licences are preserved.' };
+      }
       await tx.plan.delete({ where: { id } });
       await this.audit.record(
         { action: 'plan.deleted', entity: AuditEntity.PLAN, entityId: id, oldValue: plan, tx },
         actor,
         req,
       );
+      return { deleted: true, archived: false };
     });
-    return { deleted: true, archived: false };
   }
 
   /** Subscriber counts per plan for the distribution chart. */

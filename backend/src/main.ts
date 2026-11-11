@@ -34,10 +34,10 @@ async function bootstrap() {
   app.use(cookieParser());
 
   app.enableCors({
-    origin: config
+    origin: ['https://awexen.com', 'https://www.awexen.com', ...config
       .get<string>('CORS_ORIGINS', 'http://localhost:5173')
       .split(',')
-      .map((o) => o.trim()),
+      .map((o) => o.trim())],
     credentials: true, // required for the refresh-token cookie
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-Id'],

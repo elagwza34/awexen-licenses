@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Save } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { ErrorState, Skeleton } from '@/components/state';
@@ -9,6 +9,7 @@ import { api, ApiError } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/use-auth';
 import type { Setting } from '@/types';
+import { clearSavedDraft } from '@/lib/settings-drafts';
 
 const GROUP_LABELS: Record<string, string> = {
   company: 'بيانات الشركة',
@@ -34,32 +35,25 @@ export function SettingsPage() {
 
   const [drafts, setDrafts] = useState<Record<string, string>>({});
 
-  // Seed the editable fields once the settings arrive.
-  useEffect(() => {
-    if (!query.data?.data) return;
-    const next: Record<string, string> = {};
-    for (const setting of query.data.data) {
-      if (!EDITABLE_TYPES.has(setting.type) || setting.isSensitive) continue;
-      next[setting.key] = String(setting.value ?? '');
-    }
-    setDrafts(next);
-  }, [query.data]);
-
   const save = useMutation({
-    mutationFn: (setting: Setting) =>
-      api.put(`/settings/${setting.key}`, {
-        value:
-          setting.type === 'NUMBER'
-            ? Number(drafts[setting.key])
-            : setting.type === 'BOOLEAN'
-              ? drafts[setting.key] === 'true'
-              : drafts[setting.key],
-      }),
-    onSuccess: (_data, setting) => {
+    mutationFn: ({ setting, draft }: { setting: Setting; draft: string }) => {
+      if (setting.type === 'NUMBER' && (draft.trim() === '' || !Number.isFinite(Number(draft)) || Number(draft) < 0))
+        throw new Error('أدخل رقمًا صالحًا غير سالب قبل الحفظ.');
+      return api.put<Setting>(`/settings/${encodeURIComponent(setting.key)}`, {
+        value: setting.type === 'NUMBER' ? Number(draft) : setting.type === 'BOOLEAN' ? draft === 'true' : draft,
+      });
+    },
+    onSuccess: (updated, { setting, draft }) => {
+      queryClient.setQueryData<{ data: Setting[] }>(['settings'], current => current && ({
+        ...current, data: current.data.map(item => item.key === setting.key ? updated : item),
+      }));
+      // Clear only the value just saved. Other rows and edits typed while the
+      // request was pending survive both the response and background refetch.
+      setDrafts(current => clearSavedDraft(current, setting.key, draft));
       queryClient.invalidateQueries({ queryKey: ['settings'] });
       toast.success('تم الحفظ', setting.labelAr || setting.label || undefined);
     },
-    onError: (error) => toast.error('تعذّر الحفظ', (error as ApiError).friendlyMessage),
+    onError: (error) => toast.error('تعذّر الحفظ', error instanceof ApiError ? error.friendlyMessage : error.message),
   });
 
   if (query.isLoading) {
@@ -106,6 +100,7 @@ export function SettingsPage() {
           <CardContent className="space-y-4">
             {settings.map((setting) => {
               const readOnly = !EDITABLE_TYPES.has(setting.type) || setting.isSensitive;
+              const draft = drafts[setting.key] ?? String(setting.value ?? '');
               return (
                 <div
                   key={setting.key}
@@ -127,9 +122,9 @@ export function SettingsPage() {
                       <>
                         {setting.type === 'BOOLEAN' ? (
                           <select
-                            value={drafts[setting.key] || 'false'}
+                            value={draft || 'false'}
                             onChange={(event) =>
-                              setDrafts({ ...drafts, [setting.key]: event.target.value })
+                              setDrafts(current => ({ ...current, [setting.key]: event.target.value }))
                             }
                             className="h-9 rounded-md border border-input bg-background px-2 text-sm"
                             aria-label={setting.label ?? setting.key}
@@ -140,9 +135,9 @@ export function SettingsPage() {
                         ) : (
                           <Input
                             type={setting.type === 'NUMBER' ? 'number' : 'text'}
-                            value={drafts[setting.key] ?? ''}
+                            value={draft}
                             onChange={(event) =>
-                              setDrafts({ ...drafts, [setting.key]: event.target.value })
+                              setDrafts(current => ({ ...current, [setting.key]: event.target.value }))
                             }
                             dir={setting.type === 'NUMBER' ? 'ltr' : undefined}
                             className={`w-40 ${setting.type === 'NUMBER' ? 'text-start' : ''}`}
@@ -153,8 +148,9 @@ export function SettingsPage() {
                           <Button
                             size="sm"
                             variant="outline"
-                            isLoading={save.isPending && save.variables?.key === setting.key}
-                            onClick={() => save.mutate(setting)}
+                            isLoading={save.isPending && save.variables?.setting.key === setting.key}
+                            disabled={save.isPending || draft === String(setting.value ?? '')}
+                            onClick={() => save.mutate({ setting, draft })}
                           >
                             <Save />
                             حفظ

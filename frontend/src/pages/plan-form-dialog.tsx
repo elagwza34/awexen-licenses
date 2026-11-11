@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -20,6 +20,7 @@ import {
 import { api, ApiError } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 import type { BillingInterval, Feature, Plan } from '@/types';
+import { PMS_FEATURE_LABELS, pmsFeatureRequirements, validatePmsSelection } from '@/lib/pms-plan-features';
 
 const INTERVALS: BillingInterval[] = ['MONTHLY', 'QUARTERLY', 'YEARLY', 'LIFETIME'];
 const INTERVAL_LABELS: Record<BillingInterval, string> = {
@@ -42,10 +43,12 @@ interface FormState {
   nameAr?: string;
   description?: string;
   price: string;
+  setupFee: string;
   currency: string;
   billingInterval: BillingInterval;
   trialDays: string;
   maxDevices: string;
+  maxUsers: string; maxBranches: string; maxWarehouses: string; enforceEntitlements: boolean;
   sortOrder: string;
 }
 
@@ -57,10 +60,12 @@ function toFormState(plan: Plan | null): FormState {
     description: plan?.description ?? '',
     // stored as minor units, edited as major units
     price: plan ? String(plan.price / 100) : '0',
+    setupFee: String((plan?.setupFee ?? 0) / 100),
     currency: plan?.currency ?? 'EGP',
     billingInterval: plan?.billingInterval ?? 'MONTHLY',
     trialDays: String(plan?.trialDays ?? 0),
     maxDevices: String(plan?.maxDevices ?? 1),
+    maxUsers: String(plan?.maxUsers ?? 2), maxBranches: String(plan?.maxBranches ?? 1), maxWarehouses: String(plan?.maxWarehouses ?? 1), enforceEntitlements: true,
     sortOrder: String(plan?.sortOrder ?? 0),
   };
 }
@@ -76,14 +81,12 @@ export function PlanFormDialog({ open, plan, features, onOpenChange }: PlanFormP
 
   const [form, setForm] = useState<FormState>(() => toFormState(plan));
   const [selected, setSelected] = useState<number[]>(plan?.features?.map((f) => f.feature.id) ?? []);
-  const [seededFor, setSeededFor] = useState<number | null>(plan?.id ?? null);
-
-  // Re-seed the form when the dialog opens for a different plan.
-  if (open && (plan?.id ?? null) !== seededFor) {
-    setForm(toFormState(plan));
-    setSelected(plan?.features?.map((f) => f.feature.id) ?? []);
-    setSeededFor(plan?.id ?? null);
-  }
+  useEffect(() => {
+    if (open) {
+      setForm(toFormState(plan));
+      setSelected(plan?.features?.map((f) => f.feature.id) ?? []);
+    }
+  }, [open, plan]);
 
   const save = useMutation({
     mutationFn: () => {
@@ -93,10 +96,12 @@ export function PlanFormDialog({ open, plan, features, onOpenChange }: PlanFormP
         nameAr: form.nameAr?.trim() || undefined,
         description: form.description?.trim() || undefined,
         price: Math.round(Number(form.price) * 100),
+        setupFee: Math.round(Number(form.setupFee) * 100),
         currency: form.currency.trim().toUpperCase(),
         billingInterval: form.billingInterval,
         trialDays: Number(form.trialDays) || 0,
         maxDevices: Number(form.maxDevices) || 1,
+        maxUsers: Number(form.maxUsers), maxBranches: Number(form.maxBranches), maxWarehouses: Number(form.maxWarehouses), enforceEntitlements: form.enforceEntitlements,
         sortOrder: Number(form.sortOrder) || 0,
         featureIds: selected,
       };
@@ -110,6 +115,9 @@ export function PlanFormDialog({ open, plan, features, onOpenChange }: PlanFormP
     onError: (error) => toast.error('تعذّر الحفظ', (error as ApiError).friendlyMessage),
   });
 
+  const selectedKeys = selected.map(id => features.find(feature => feature.id === id)?.key ?? '__UNKNOWN__');
+  const selectionError = validatePmsSelection(selectedKeys, Number(form.maxBranches), Number(form.maxWarehouses));
+
   const toggleFeature = (id: number) => {
     setSelected((current) =>
       current.includes(id) ? current.filter((value) => value !== id) : [...current, id],
@@ -122,7 +130,7 @@ export function PlanFormDialog({ open, plan, features, onOpenChange }: PlanFormP
         <DialogHeader>
           <DialogTitle>{isEdit ? 'تعديل الخطة' : 'خطة جديدة'}</DialogTitle>
           <DialogDescription>
-            الميزات المختارة تُخزَّن كبيانات، ويقرأها تطبيق العميل من التوقيع المُفعَّل.
+            العميل يحصل على المميزات المختارة فقط بعد اعتماد اشتراكه وتفعيل الترخيص. المميزات غير المختارة تُغلق في التطبيق والخادم، مع استمرار تطبيق صلاحيات المستخدمين.
           </DialogDescription>
         </DialogHeader>
 
@@ -130,6 +138,7 @@ export function PlanFormDialog({ open, plan, features, onOpenChange }: PlanFormP
           className="space-y-4"
           onSubmit={(event) => {
             event.preventDefault();
+            if (selectionError) { toast.error('راجع مميزات الخطة', selectionError); return; }
             save.mutate();
           }}
         >
@@ -152,6 +161,9 @@ export function PlanFormDialog({ open, plan, features, onOpenChange }: PlanFormP
             <Field label="السعر *">
               <Input type="number" step="0.01" min="0" value={form.price}
                 onChange={(e) => setForm({ ...form, price: e.target.value })} dir="ltr" className="text-start" />
+            </Field>
+            <Field label="رسوم التفعيل لأول مرة">
+              <Input type="number" step="0.01" min="0" value={form.setupFee} onChange={(e) => setForm({ ...form, setupFee: e.target.value })} dir="ltr" />
             </Field>
             <Field label="فترة الفوترة *">
               <Select value={form.billingInterval}
@@ -189,10 +201,15 @@ export function PlanFormDialog({ open, plan, features, onOpenChange }: PlanFormP
             ) : (
               <div className="grid max-h-56 gap-2 overflow-y-auto rounded-md border border-border p-3 sm:grid-cols-2">
                 {features.map((feature) => (
-                  <label key={feature.id} className="flex cursor-pointer items-center gap-2 text-sm">
+                  <label key={feature.id} className="flex cursor-pointer items-start gap-2 text-sm">
                     <input type="checkbox" checked={selected.includes(feature.id)}
+                      disabled={!Object.prototype.hasOwnProperty.call(PMS_FEATURE_LABELS, feature.key) && !selected.includes(feature.id)}
                       onChange={() => toggleFeature(feature.id)} className="h-4 w-4 rounded border-input" />
-                    <span>{feature.nameAr || feature.name}</span>
+                    <span>{feature.nameAr || feature.name}
+                      {!Object.prototype.hasOwnProperty.call(PMS_FEATURE_LABELS, feature.key)
+                        ? <small className="block text-destructive">غير مدعومة في PMS الحالي</small>
+                        : pmsFeatureRequirements(feature.key) && <small className="block text-muted-foreground">تحتاج: {pmsFeatureRequirements(feature.key)}</small>}
+                    </span>
                     <span className="ltr text-[10px] text-muted-foreground">{feature.key}</span>
                   </label>
                 ))}
@@ -200,8 +217,15 @@ export function PlanFormDialog({ open, plan, features, onOpenChange }: PlanFormP
             )}
           </div>
 
-          <DialogFooter>
-            <Button type="submit" isLoading={save.isPending}>
+          <div className="grid grid-cols-3 gap-3">
+          {([['maxUsers','المستخدمون النشطون'],['maxBranches','الفروع النشطة'],['maxWarehouses','المخازن النشطة']] as const).map(([key,label])=><div key={key}><Label>{label}</Label><Input type="number" min="1" value={form[key]} onChange={event=>setForm({...form,[key]:event.target.value})}/></div>)}
+        </div>
+        <p className="text-sm">تُطبّق مميزات وحدود هذه الخطة تلقائيًا داخل PMS.</p>
+        {plan && !plan.enforceEntitlements && <p className="text-sm text-destructive">هذه خطة قديمة غير مقيّدة. حفظها يفعّل المميزات والحدود المختارة على تراخيصها عند تحديث الترخيص.</p>}
+        {selectionError && <p role="alert" className="text-sm text-destructive">{selectionError}</p>}
+        <p className="text-xs text-muted-foreground">الاشتراك الجديد يأخذ المميزات عند التفعيل. تعديل الخطة يصل إلى الأجهزة بعد تحديث الترخيص عبر الإنترنت؛ الأجهزة غير المتصلة تحتفظ بالتصريح السابق حتى نهاية صلاحيته. حدود المستخدمين والفروع والمخازن لكل شركة، والأجهزة لها حد مستقل.</p>
+        <DialogFooter>
+            <Button type="submit" isLoading={save.isPending} disabled={Boolean(selectionError) || features.length === 0}>
               {isEdit ? 'حفظ التعديلات' : 'إنشاء الخطة'}
             </Button>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>إلغاء</Button>

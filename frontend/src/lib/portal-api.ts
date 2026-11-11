@@ -32,6 +32,7 @@ export function subscribeToPortalToken(listener: (token: string | null) => void)
 }
 
 export interface PortalCustomer {
+  requestedPlanId: number | null;
   id: number;
   email: string;
   name: string;
@@ -45,6 +46,10 @@ export interface PortalCustomer {
 }
 
 export interface PortalPlan {
+  setupFee: number;
+  maxUsers: number;
+  maxBranches: number;
+  maxWarehouses: number;
   id: number;
   key: string;
   name: string;
@@ -95,6 +100,7 @@ export interface PortalOverview {
 }
 
 export interface PortalRequest {
+  plan?: { name: string; nameAr: string | null; billingInterval: string } | null;
   id: number;
   amount: number;
   currency: string;

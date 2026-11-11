@@ -8,13 +8,16 @@ import { LicensesService } from './licenses.service';
 import { LicenseStatusService } from './license-status.service';
 import { SchedulerController } from './scheduler.controller';
 import { SchedulerLockService } from './scheduler-lock.service';
+import { PmsInstallationsService } from './pms-installations.service';
+import { PmsInstallationsController } from './pms-installations.controller';
 
 @Module({
   // The validation controller reads analytics for the health report, so it
   // reuses that single implementation rather than duplicating the query.
   imports: [AnalyticsModule],
-  controllers: [LicensesController, LicenseValidationController, SchedulerController],
+  controllers: [LicensesController, LicenseValidationController, SchedulerController, PmsInstallationsController],
   providers: [
+    PmsInstallationsService,
     LicensesService,
     LicenseStatusService,
     LicenseValidationService,
