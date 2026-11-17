@@ -1,0 +1,189 @@
+{
+  "Published": true,
+  "Site": "https://licenses.awexen.com",
+  "SourceCommit": "49857c12c90100e30c8d9963b28a3efccb90bb7e",
+  "BackendBuild": {
+    "Id": "01a1ea34-057c-73a1-853c-c20b9d2b0698",
+    "State": "completed"
+  },
+  "Migration": [
+    {
+      "migration_name": "20261117000200_software_systems_annual_discount",
+      "finished_at": "2026-11-17T15:49:17.394Z"
+    }
+  ],
+  "DatabaseBackup": {
+    "Path": "D:\\PMS-Release-Recovery\\portal-systems-20261117-756aec0a\\before-systems.dump",
+    "Bytes": 172426,
+    "SHA256": "c4b69093ba66413336b9db107ae33c4c57e8f721e79f3f46666efc7f7c14af4b",
+    "ArchiveListVerified": true,
+    "AccessRestricted": true
+  },
+  "LiveApi": {
+    "Health": {
+      "status": "ok",
+      "database": "up",
+      "signingKeyLoaded": true,
+      "uptimeSeconds": 1,
+      "timestamp": "2026-11-17T15:54:55.473Z"
+    },
+    "SourceCommit": "49857c12c90100e30c8d9963b28a3efccb90bb7e",
+    "AuthenticatedAdminReadsPassed": true,
+    "Systems": [
+      {
+        "Id": 1,
+        "Key": "PMS",
+        "Name": "نظام إدارة المنتجات"
+      }
+    ],
+    "Pricing": [
+      {
+        "Plan": "الأساسية",
+        "Monthly": 1500,
+        "AnnualService": 15300,
+        "SetupFee": 3000,
+        "FirstAnnualTotal": 18300,
+        "Currency": "EGP"
+      },
+      {
+        "Plan": "النمو",
+        "Monthly": 3500,
+        "AnnualService": 35700,
+        "SetupFee": 5000,
+        "FirstAnnualTotal": 40700,
+        "Currency": "EGP"
+      },
+      {
+        "Plan": "المتقدمة",
+        "Monthly": 6500,
+        "AnnualService": 66300,
+        "SetupFee": 8000,
+        "FirstAnnualTotal": 74300,
+        "Currency": "EGP"
+      }
+    ],
+    "AdminTokenRejectedByCustomerGuard": true,
+    "IssuerKeyUnchanged": true,
+    "IssuerKeyFingerprint": "fa5b6e7048dac2f7c1c24a1a6791320d293e38e220ba87d7ba362d73bbbd35cf",
+    "ReceiptsVerified": 5,
+    "PreviouslyMissingReceiptReferences": 1,
+    "NoCustomerBillingActionsPerformed": true,
+    "CheckedUtc": "2026-11-17T15:55:02.206Z"
+  },
+  "Frontend": {
+    "Published": true,
+    "SourceCommit": "49857c12c90100e30c8d9963b28a3efccb90bb7e",
+    "Domain": "licenses.awexen.com",
+    "Files": [
+      {
+        "File": "_headers",
+        "Bytes": 997,
+        "SHA256": "1207770278e59f5a50f1a4cd0901c90ae8b0fdced94b3ae7a647c446d9a1e0a7",
+        "Uploaded": false
+      },
+      {
+        "File": "_redirects",
+        "Bytes": 347,
+        "SHA256": "c14892f5f0618852280199906aa2aee8552831b76093b42798afc9b5b225f75b",
+        "Uploaded": false
+      },
+      {
+        "File": "assets/charts-82EuaTck.js",
+        "Bytes": 411577,
+        "SHA256": "042f9a0df80b216c1383db60038277d21faf9fff6eba55eba2443ae59c73221a",
+        "Uploaded": false
+      },
+      {
+        "File": "assets/index-BLo_vvxZ.css",
+        "Bytes": 29714,
+        "SHA256": "9e6bf7d2757e45b5057b4da3779dbf6a3a2b8888383d9cdffe9c287ecd009af2",
+        "Uploaded": true
+      },
+      {
+        "File": "assets/index-JHO1cjYn.js",
+        "Bytes": 466168,
+        "SHA256": "8eb4dfa509dcabf8cbd862eb487aaa5405c5e31ef70f64e3a4752b019725927c",
+        "Uploaded": true
+      },
+      {
+        "File": "assets/query-CS6_8685.js",
+        "Bytes": 49001,
+        "SHA256": "871efe8bceffeb7fb1b2bb0f90a63362c3c27ac8b0edf4b002ed324aa0cb433f",
+        "Uploaded": false
+      },
+      {
+        "File": "assets/vendor-CNyU4A8i.js",
+        "Bytes": 157145,
+        "SHA256": "f8072d30fd4515294746fb13f0fb6a19ca7aef3183a7a6040b880ce825957b82",
+        "Uploaded": false
+      },
+      {
+        "File": "index.html",
+        "Bytes": 1026,
+        "SHA256": "e352c45990d4d080b0c268ecaa15a58b41577c1064bac15df3a4c4f384140cd8",
+        "Uploaded": true
+      }
+    ],
+    "HostedAssetBytesVerified": true,
+    "HtmlBuildReferencesVerified": true,
+    "SpaRoutesVerified": true,
+    "DownloadsDirectoryNotWritten": true,
+    "RoutingUnchanged": true,
+    "CheckedUtc": "2026-11-17T15:55:12.491Z"
+  },
+  "Browser": {
+    "RealAdminSystemsScreen": true,
+    "RealAdminAnnualEditorReadOnly": true,
+    "HostedCustomerSystemsScreen": true,
+    "HostedAnnualCards": true,
+    "HostedMySubscriptionsScreen": true,
+    "Mobile390NoOverflow": true,
+    "NoPageErrors": true,
+    "CustomerSessionAndSubscriptionFixtures": true,
+    "PlanCatalogueFromRealApi": true,
+    "CustomerBusinessMutationsBlocked": true,
+    "RealCustomerBillingActionsPerformed": false,
+    "CheckedUtc": "2026-11-17T15:57:57.691Z"
+  },
+  "DownloadsAfter": {
+    "Files": [
+      {
+        "Version": "1.4.7",
+        "Bytes": 163468728,
+        "WindowsExecutablePrefixVerified": true
+      },
+      {
+        "Version": "1.4.8",
+        "Bytes": 163464121,
+        "WindowsExecutablePrefixVerified": true
+      },
+      {
+        "Version": "1.4.9",
+        "Bytes": 163477294,
+        "WindowsExecutablePrefixVerified": true
+      },
+      {
+        "Version": "1.4.10",
+        "Bytes": 163001653,
+        "WindowsExecutablePrefixVerified": true
+      },
+      {
+        "Version": "1.4.11",
+        "Bytes": 162997590,
+        "WindowsExecutablePrefixVerified": true
+      }
+    ],
+    "Latest": {
+      "Version": "1.4.11",
+      "Build": 1411,
+      "Checksum": "b91377e09b270c3adac0dec264979d8de42a4ffec08cbf8a26e679ab1adb1ed4"
+    },
+    "Method": "HTTP range and known complete size; installers are not rewritten by this rollout",
+    "CheckedUtc": "2026-11-17T15:57:50.395Z"
+  },
+  "ReceiptReferencesUnchanged": 6,
+  "GitAutoDeploymentEnabled": false,
+  "BackendTestsPassed": 64,
+  "ProductionCustomerBillingActionsPerformed": false,
+  "PublishedUtc": "2026-11-17T16:00:37.698971+00:00"
+}

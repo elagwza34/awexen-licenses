@@ -1,6 +1,6 @@
 # Customer systems and annual pricing
 
-Implemented and verified locally on 2026-11-17. Git publication was subsequently requested by the owner; source publication is recorded in Git history. These changes have not been deployed.
+Implemented, verified, committed, and subsequently deployed on 2026-11-17 after the owner's authorization. See [publication evidence](PUBLICATION.md) for the live rollout. The implementation-phase verification below remains historical evidence.
 
 ## Customer experience
 
@@ -26,11 +26,11 @@ Setup is not repeated for renewals or upgrades. Paid history is scoped to the so
 
 ## Data and administrative controls
 
-Pending additive migration: `20261117000200_software_systems_annual_discount`. It creates `software_systems`, seeds PMS, and associates existing plans with PMS through a restricted foreign key. It does not rewrite historical financial rows or backfill annual contract prices.
+Additive migration: `20261117000200_software_systems_annual_discount`. It creates `software_systems`, seeds PMS, and associates existing plans with PMS through a restricted foreign key. It does not rewrite historical financial rows or backfill annual contract prices. It was subsequently applied during the authorized publication.
 
 The administrative Systems page uses existing plan-view/create/update permissions. Systems are hidden rather than deleted, preserving existing customer subscriptions. Plan creation selects a system; existing plans cannot move between systems. Active-system checks guard checkout. Other systems cannot inherit the global PMS stable installer channel; their installers require the existing plan-specific release configuration. Registering a system alone does not implement another application's feature enforcement or installer.
 
-Deploy the migration and API before the frontend in a later authorized rollout. Retain the existing issuer signing key, runtime receipts, and manually uploaded installers. Frontend Git auto-deployment remains disabled under the established deployment policy. No new desktop installer is needed for these portal changes.
+The authorized rollout applied the migration and API before publishing the frontend. Future deployments must retain the existing issuer signing key, runtime receipts, and manually uploaded installers. Frontend Git auto-deployment remains disabled under the established deployment policy. No new desktop installer is needed for these portal changes.
 
 ## Verification
 
@@ -38,4 +38,4 @@ Deploy the migration and API before the frontend in a later authorized rollout. 
 - Isolated PostgreSQL: **3 passed**, including real signing/approval races, recovery, system isolation, masked owned keys, the annual formula, first setup per system, and stale setup-charge rejection at submission and approval. The disposable database was dropped and its server stopped.
 - Frontend production build passed. Browser fixtures passed for the single initial system tile, annual quote submission, 390px mobile layout, key reveal/hide, plan-scoped download navigation, owned renewal, administrative system creation, and read-only annual preview. Production requests were blocked during browser testing.
 
-Evidence summary and source hashes: `VERIFICATION.json` and `SOURCE_MANIFEST.json`. Raw logs and screenshots remain under `D:/PMS/artifacts/portal-systems-*`. No live customer purchase, payment approval, production migration, or deployment was performed.
+Implementation-phase evidence and source hashes: `VERIFICATION.json` and `SOURCE_MANIFEST.json`. Raw logs and screenshots remain under `D:/PMS/artifacts/portal-systems-*`. No live customer purchase or payment approval was performed. Production migration and deployment are recorded separately in `PUBLICATION.json`.
