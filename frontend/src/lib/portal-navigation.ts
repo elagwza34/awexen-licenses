@@ -2,7 +2,6 @@ import {
   CreditCard,
   Gauge,
   KeyRound,
-  Layers,
   ReceiptText,
   UserCog,
 } from 'lucide-react';
@@ -32,18 +31,18 @@ export const PORTAL_NAV: PortalNavItem[] = [
     description: 'نظرة سريعة على ترخيصك وأكواد التفعيل',
   },
   {
-    label: 'أكواد التفعيل',
-    labelEn: 'Licences',
-    path: '/portal/licenses',
+    label: 'اشتراكاتي',
+    labelEn: 'My subscriptions',
+    path: '/portal/my-subscriptions',
     icon: KeyRound,
-    description: 'أكواد التفعيل والأجهزة المرتبطة بها',
+    description: 'تفاصيل الاشتراكات وأكواد التفعيل والتنزيل',
   },
   {
-    label: 'الاشتراك',
-    labelEn: 'Subscription',
+    label: 'الأنظمة والاشتراكات',
+    labelEn: 'Systems and subscriptions',
     path: '/portal/subscription',
     icon: CreditCard,
-    description: 'باقتك وتاريخ التجديد',
+    description: 'اختر النظام والخطة ومدة الاشتراك',
   },
   {
     label: 'طلبات التفعيل',
@@ -51,13 +50,6 @@ export const PORTAL_NAV: PortalNavItem[] = [
     path: '/portal/requests',
     icon: ReceiptText,
     description: 'طلباتك وحالة مراجعتها',
-  },
-  {
-    label: 'تنزيل البرنامج',
-    labelEn: 'Download',
-    path: '/portal/download',
-    icon: Layers,
-    description: 'أحدث إصدار متاح لجهازك',
   },
   {
     label: 'حسابي',

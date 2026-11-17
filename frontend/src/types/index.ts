@@ -70,6 +70,8 @@ export interface Feature {
 }
 
 export interface Plan {
+  systemId:number;
+  system?:{id:number;key:string;name:string;nameAr:string};
   monthlyPrice?: number | null; yearlyPrice?: number | null;
   setupFee: number;
   enforceEntitlements: boolean;
@@ -108,7 +110,7 @@ export interface Subscription {
   expiresAt: string | null;
   daysRemaining?: number | null;
   customer?: { id: number; name: string; company: string | null; email: string };
-  plan?: { id: number; name: string; nameAr: string | null; key: string; maxDevices: number };
+  plan?: { id: number; name: string; nameAr: string | null; key: string; maxDevices: number; systemId:number };
   _count?: { licenses: number; payments: number };
 }
 

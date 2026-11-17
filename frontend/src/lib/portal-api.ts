@@ -46,8 +46,11 @@ export interface PortalCustomer {
 }
 
 export interface BillingQuote { id:string;expiresAt:string;planId:number;kind:string;billingInterval:string;amount:number;currency:string;credit:number;setupFee:number;serviceCharge:number;periodStart:string;periodEnd:string;sourceSubscriptionId:number|null }
-export interface BillingSubscription {id:number;planId:number;billingInterval:string;expiresAt:string|null;status:string;plan:{name:string;nameAr:string|null}}
+export interface SoftwareSystem {id:number;key:string;name:string;nameAr:string;description?:string|null;active?:boolean}
+export interface BillingSubscription {id:number;planId:number;billingInterval:string;startsAt:string;expiresAt:string|null;price:number;currency:string;status:string;plan:{key:string;name:string;nameAr:string|null;systemId:number;system:SoftwareSystem};licenses:{id:number;status:string;licenseKey:string;expiresAt:string|null}[]}
 export interface PortalPlan {
+  systemId:number;
+  system:SoftwareSystem;
   billingOptions: {billingInterval:'MONTHLY'|'YEARLY';price:number}[];
   setupFee: number;
   maxUsers: number;
@@ -170,6 +173,7 @@ async function portalRequest<T>(
 }
 
 export const portalApi = {
+  systems:()=>portalRequest<{data:SoftwareSystem[]}>('/portal/systems'),
   installer: (planKey?:string) => portalRequest<{ release: NonNullable<PortalOverview['latestRelease']> & {downloadUrl:string;checksum:string|null} }>('/portal/download'+(planKey?'?planKey='+encodeURIComponent(planKey):'')),
   register: (body: {
     name: string;

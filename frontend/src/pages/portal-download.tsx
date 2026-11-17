@@ -78,7 +78,7 @@ export function PortalDownloadPage() {
             <div>
               <p className="font-medium">التنزيل مقفل حالياً</p>
               <p className="mt-1 max-w-md text-sm text-muted-foreground">
-                يُفتح التنزيل بعد تأكيد الدفع. أرسل صورة الحوالة من صفحة «الاشتراك» وسنصدر
+                يُفتح التنزيل بعد تأكيد الدفع. أرسل صورة الحوالة من صفحة «الأنظمة والاشتراكات» وسنصدر
                 الكود ونفتح التنزيل معاً.
               </p>
             </div>

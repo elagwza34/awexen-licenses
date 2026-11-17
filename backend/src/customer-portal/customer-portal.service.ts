@@ -360,15 +360,22 @@ export class CustomerPortalService {
     return createBillingQuote(this.prisma,customerId,input);
   }
   async billingSubscriptions(customerId:number) {
-    return { unlinkedLicenseCount: await this.prisma.license.count({where:{customerId,subscriptionId:null,status:{in:['ACTIVE','TRIAL']}}}), subscriptions: await this.prisma.subscription.findMany({where:{customerId,status:{in:['ACTIVE','TRIAL','EXPIRED']}},orderBy:{createdAt:'desc'},select:{id:true,planId:true,status:true,billingInterval:true,price:true,currency:true,expiresAt:true,plan:{select:{name:true,nameAr:true}}}}) };
+    const subscriptions=await this.prisma.subscription.findMany({where:{customerId},orderBy:{createdAt:'desc'},select:{id:true,planId:true,status:true,billingInterval:true,price:true,currency:true,startsAt:true,expiresAt:true,plan:{select:{key:true,name:true,nameAr:true,systemId:true,system:{select:{key:true,nameAr:true,name:true}}}},licenses:{where:{customerId},select:{id:true,status:true,licenseKey:true,expiresAt:true}}}});
+    return { unlinkedLicenseCount: await this.prisma.license.count({where:{customerId,subscriptionId:null,status:{in:['ACTIVE','TRIAL']}}}), subscriptions:subscriptions.map(s=>({...s,licenses:s.licenses.map(l=>({...l,licenseKey:this.maskKey(l.licenseKey)}))})) };
+  }
+
+  async systems() {
+    return {data:await this.prisma.softwareSystem.findMany({where:{active:true},orderBy:{id:'asc'},select:{id:true,key:true,name:true,nameAr:true,description:true}})};
   }
 
   async catalogue() {
     const plans = await this.prisma.plan.findMany({
-      where: { status: 'ACTIVE', enforceEntitlements: true },
+      where: { status: 'ACTIVE', enforceEntitlements: true, system:{active:true} },
       orderBy: { sortOrder: 'asc' },
       select: {
         id: true,
+        systemId: true,
+        system:{select:{id:true,key:true,name:true,nameAr:true}},
         key: true,
         name: true,
         nameAr: true,

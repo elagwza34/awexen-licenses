@@ -23,6 +23,10 @@ export function entitlementHash(plan: any) {
           plan.maxWarehouses,
         ],
         enforced: plan.enforceEntitlements,
+        // Preserve the frozen hashes of PMS quotes created before the registry.
+        ...(plan.systemId && plan.systemId !== 1
+          ? { systemId: plan.systemId }
+          : {}),
       }),
     )
     .digest("hex");
@@ -36,6 +40,14 @@ export function money(value: number) {
   return value;
 }
 export function priceFor(plan: any, interval: string): number {
+  const monthly =
+    plan.monthlyPrice ??
+    ((plan.billingInterval ?? "MONTHLY") === "MONTHLY" ? plan.price : 0);
+  if (interval === "YEARLY" && monthly > 0) {
+    money(monthly);
+    // Twelve monthly payments, less 15%; round once to the nearest minor unit.
+    return money(Number((BigInt(monthly) * 102n + 5n) / 10n));
+  }
   const explicit =
     interval === "MONTHLY"
       ? plan.monthlyPrice

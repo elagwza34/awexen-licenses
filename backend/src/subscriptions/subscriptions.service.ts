@@ -65,7 +65,7 @@ export class SubscriptionsService {
         orderBy: this.buildOrderBy(query),
         include: {
           customer: { select: { id: true, name: true, company: true, email: true } },
-          plan: { select: { id: true, name: true, nameAr: true, key: true, maxDevices: true } },
+          plan: { select: { id: true, name: true, nameAr: true, key: true, maxDevices: true, systemId:true } },
           _count: { select: { licenses: true, payments: true } },
         },
       }),

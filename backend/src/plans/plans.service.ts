@@ -1,4 +1,4 @@
-import { saleOptions } from './billing-pricing';
+import { priceFor, saleOptions } from './billing-pricing';
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { AuditEntity, PlanStatus, Prisma, SubscriptionStatus } from '@prisma/client';
 import type { Request } from 'express';
@@ -29,6 +29,7 @@ export class PlansService {
       where,
       orderBy: [{ sortOrder: 'asc' }, { price: 'asc' }],
       include: {
+        system: true,
         features: { include: { feature: true } },
         _count: { select: { subscriptions: true, licenses: true } },
       },
@@ -37,6 +38,7 @@ export class PlansService {
     return {
       data: plans.map((plan) => ({
         ...plan,
+        yearlyPrice:saleOptions(plan).find(x=>x.billingInterval==='YEARLY')?.price??null,
         featureKeys: plan.features.map((pf) => pf.feature.key),
       })),
     };
@@ -69,11 +71,13 @@ export class PlansService {
     if(error)throw new BadRequestException(error);
   }
   async create(dto: CreatePlanDto, actor: AuditActor, req: Request) {
+    if(dto.systemId) await this.prisma.softwareSystem.findUniqueOrThrow({where:{id:dto.systemId}});
     await this.validatePolicy(dto);
     const existing = await this.prisma.plan.findUnique({ where: { key: dto.key } });
     if (existing) throw new ConflictException('A plan with this key already exists');
 
     const { featureIds, ...planData } = dto;
+    if(saleOptions(planData).some(x=>x.billingInterval==='YEARLY')) planData.yearlyPrice=priceFor(planData,'YEARLY');
 
     return this.prisma.$transaction(async (tx) => {
       const created = await tx.plan.create({
@@ -109,6 +113,7 @@ export class PlansService {
     });
 
     await this.validatePolicy(dto,existing);
+    if(dto.systemId && dto.systemId!==existing.systemId) throw new BadRequestException('Create a new plan to change its software system; existing contracts must retain their system.');
     if (dto.key && dto.key !== existing.key) {
       const activeLicenses = await this.prisma.license.count({ where: { planId: id } });
       if (activeLicenses > 0) {
@@ -132,7 +137,7 @@ export class PlansService {
 
       const updated = await tx.plan.update({
         where: { id },
-        data: planData,
+        data: {...planData,...(saleOptions({...existing,...planData}).some(x=>x.billingInterval==='YEARLY')?{yearlyPrice:priceFor({...existing,...planData},'YEARLY')}:{})},
         include: { features: { include: { feature: true } } },
       });
 

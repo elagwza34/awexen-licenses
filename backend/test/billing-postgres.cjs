@@ -228,7 +228,7 @@ test("isolated billing: paid purchase, concurrent approvals, renewals, proration
     assert.equal(await db.license.count(), 1);
     const annual = await request(pro.id, "YEARLY");
     assert.ok(annual.q.credit > 0);
-    assert.equal(annual.q.price, 600000);
+    assert.equal(annual.q.price, 612000);
     await approveBillingQuote(db, audit, licenses, annual.p.id, {}, actor, req);
     sub = await db.subscription.findUniqueOrThrow({ where: { id: sub.id } });
     assert.equal(sub.billingInterval, "YEARLY");

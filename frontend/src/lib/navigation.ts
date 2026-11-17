@@ -51,6 +51,7 @@ export const NAV_SECTIONS: NavSection[] = [
   {
     title: 'البيع',
     items: [
+      { label: 'الأنظمة', labelEn: 'Systems', path: '/systems', icon: Layers, permission: 'plans.view' },
       { label: 'الخطط', labelEn: 'Plans', path: '/plans', icon: Layers, permission: 'plans.view' },
       { label: 'الميزات', labelEn: 'Features', path: '/features', icon: Layers, permission: 'features.view' },
       { label: 'المدفوعات', labelEn: 'Payments', path: '/payments', icon: CreditCard, permission: 'payments.view' },

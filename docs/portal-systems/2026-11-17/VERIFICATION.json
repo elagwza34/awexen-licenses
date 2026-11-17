@@ -1,0 +1,42 @@
+{
+  "Status": "VERIFIED_NOT_DEPLOYED",
+  "BackendTestsPassed": 64,
+  "PostgresAcceptanceTestsPassed": 3,
+  "ApiBuildPassed": true,
+  "FrontendBuildPassed": true,
+  "ProductionChanged": false,
+  "ImplementationPhaseCommitOrPushPerformed": false,
+  "AnnualDiscountPercent": 15,
+  "SetupFeesDiscounted": false,
+  "Browser": {
+    "OneInitialSystemTile": true,
+    "ScopedPlansAndAnnualTabs": true,
+    "AnnualQuoteSubmission": true,
+    "Mobile390NoOverflow": true,
+    "MySubscriptionsMaskedKeyReveal": true,
+    "OwnedPlanDownloadLink": true,
+    "RenewalUsesOwnedSubscription": true,
+    "AdminSystemCreation": true,
+    "ReadOnlyAnnualPreview": true,
+    "NoPageErrors": true,
+    "ProductionRequestsBlocked": true
+  },
+  "Logs": [
+    {
+      "Path": "D:\\PMS\\artifacts\\portal-systems-tests-accepted.log",
+      "SHA256": "f7e615875b2931878a906471425cfed1e26a932bf92634d2237df321bb4bcd36"
+    },
+    {
+      "Path": "D:\\PMS\\artifacts\\portal-systems-api-accepted.log",
+      "SHA256": "216f041f2abb144cff989397e92d2745b41c667ab060a3cff2e5206210c5650e"
+    },
+    {
+      "Path": "D:\\PMS\\artifacts\\portal-systems-ui-accepted.log",
+      "SHA256": "3459140e699390a2efedbb3dcb41ae8d9ddaf8b394fb1cc6a8a1d5712065bfc4"
+    },
+    {
+      "Path": "D:\\PMS\\artifacts\\portal-systems-pg-final.log",
+      "SHA256": "3c444665ad838954cd60f340752d2b1c5c54bd9693089e126e45500624635cb8"
+    }
+  ]
+}

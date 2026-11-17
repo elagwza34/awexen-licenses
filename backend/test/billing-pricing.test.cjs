@@ -41,10 +41,10 @@ const subscription = {
   expiresAt: new Date("2026-12-01"),
   updatedAt: new Date("2026-11-01"),
 };
-test("legacy price only supplies its own interval; an annual price is never invented", () => {
+test("annual price follows the approved 15 percent discount on monthly service", () => {
   assert.equal(priceFor(basic, "MONTHLY"), 30000);
-  assert.throws(() => priceFor(basic, "YEARLY"));
-  assert.throws(() => priceFor({ ...pro, yearlyPrice: 0 }, "YEARLY"));
+  assert.equal(priceFor(basic, "YEARLY"),306000);
+  assert.equal(priceFor({ ...pro, yearlyPrice: 0 }, "YEARLY"),612000);
 });
 test("same-interval upgrade charges the remaining difference and preserves expiry", () => {
   const q = billingQuote(pro, customer, subscription, "MONTHLY", now);
@@ -55,7 +55,7 @@ test("same-interval upgrade charges the remaining difference and preserves expir
 });
 test("switching to annual starts an annual term and credits unused monthly service", () => {
   const q = billingQuote(pro, customer, subscription, "YEARLY", now);
-  assert.equal(q.amount, 585000);
+  assert.equal(q.amount, 597000);
   assert.equal(q.periodEnd, "2027-11-16T00:00:00.000Z");
 });
 test("renewal extends from current expiry without charging setup twice", () => {
@@ -96,7 +96,7 @@ test("cross-currency, downgrades and negative balances require manual review", (
   );
   assert.throws(() =>
     billingQuote(
-      { ...pro, yearlyPrice: 100 },
+      { ...pro, monthlyPrice:10, yearlyPrice: 100 },
       customer,
       subscription,
       "YEARLY",

@@ -79,7 +79,7 @@ export function SubscriptionUpgradeDialog({
               className="rounded-md border bg-background p-3"
             >
               {plans.data?.data
-                .filter((p) => p.enforceEntitlements)
+                .filter((p) => p.enforceEntitlements && p.systemId===subscription.plan?.systemId)
                 .map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.nameAr ?? p.name}

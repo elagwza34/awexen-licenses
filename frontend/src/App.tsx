@@ -21,6 +21,8 @@ import { PortalForgotPasswordPage,PortalResetPasswordPage } from '@/pages/portal
 import { PortalOverviewPage } from '@/pages/portal-overview';
 import { PortalLicensesPage } from '@/pages/portal-licenses';
 import { PortalSubscriptionPage } from '@/pages/portal-subscription';
+import { PortalSystemsPage } from '@/pages/portal-systems';
+import { PortalMySubscriptionsPage } from '@/pages/portal-my-subscriptions';
 import { PortalRequestsPage } from '@/pages/portal-requests';
 import { PortalDownloadPage } from '@/pages/portal-download';
 import { PortalAccountPage } from '@/pages/portal-account';
@@ -30,6 +32,7 @@ import { LoginPage } from '@/pages/login';
 import { NotFoundPage } from '@/pages/not-found';
 import { PaymentsPage } from '@/pages/payments';
 import { PlansPage } from '@/pages/plans';
+import { SystemsPage } from '@/pages/systems';
 import { ReleasesPage } from '@/pages/releases';
 import { SettingsPage } from '@/pages/settings';
 import { SubscriptionsPage } from '@/pages/subscriptions';
@@ -76,7 +79,9 @@ export default function App() {
                 <Route element={<PortalLayout />}>
                   <Route path="/portal" element={<PortalOverviewPage />} />
                   <Route path="/portal/licenses" element={<PortalLicensesPage />} />
-                  <Route path="/portal/subscription" element={<PortalSubscriptionPage />} />
+                  <Route path="/portal/subscription" element={<PortalSystemsPage />} />
+                  <Route path="/portal/subscription/:systemKey" element={<PortalSubscriptionPage />} />
+                  <Route path="/portal/my-subscriptions" element={<PortalMySubscriptionsPage />} />
                   <Route path="/portal/requests" element={<PortalRequestsPage />} />
                   <Route path="/portal/download" element={<PortalDownloadPage />} />
                   <Route path="/portal/account" element={<PortalAccountPage />} />
@@ -91,6 +96,7 @@ export default function App() {
                   <Route path="customers" element={<CustomersPage />} />
                   <Route path="customers/:id" element={<CustomerDetailPage />} />
                   <Route path="plans" element={<PlansPage />} />
+                  <Route path="systems" element={<SystemsPage />} />
                   <Route path="licenses" element={<LicensesPage />} />
                   <Route path="licenses/:id" element={<LicenseDetailPage />} />
                   <Route path="subscriptions" element={<SubscriptionsPage />} />

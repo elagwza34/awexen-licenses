@@ -1,0 +1,129 @@
+{
+  "BaseCommit": "3ababcb45b7608f61ef03e807baada16d2ac3ea8",
+  "Files": [
+    {
+      "Path": "backend/prisma/migrations/20261117000200_software_systems_annual_discount/migration.sql",
+      "SHA256": "85a62edae0889c358bc4d7d3801e4c78a4f3525eeba5bb9a7217c59ec3441aca"
+    },
+    {
+      "Path": "backend/prisma/schema.prisma",
+      "SHA256": "b0c9cf91c8c4aca7977b01d45766e1c30f51cb83146f6f0ee552ec269cced043"
+    },
+    {
+      "Path": "backend/src/customer-portal/customer-portal.controller.ts",
+      "SHA256": "adb2a786455e306758c5759f069b65f28b589e0418dbf2d0ad90a160b491b4e9"
+    },
+    {
+      "Path": "backend/src/customer-portal/customer-portal.service.ts",
+      "SHA256": "2f301dbd917e18590b6ad7ad0f572c88389c71fa20bd38ed3cad7207c64259b1"
+    },
+    {
+      "Path": "backend/src/payments/billing-checkout.ts",
+      "SHA256": "7baf075b17841c2da60cd8655667a282492e1a7c82dae4e547c93dace925482b"
+    },
+    {
+      "Path": "backend/src/payments/setup-fee-policy.ts",
+      "SHA256": "7db8986608955d7fac61fb29e2b1fbc91c7533591a2bf0a1274e8ff1781d3d24"
+    },
+    {
+      "Path": "backend/src/plans/billing-pricing.ts",
+      "SHA256": "1037a4ae2c1aa27f67340846bb7bafcb5e5aedcaef9ce90094a05dc69a91d503"
+    },
+    {
+      "Path": "backend/src/plans/dto/plan.dto.ts",
+      "SHA256": "664a16de0da2350dee4611d8346d9e13d434c0b69a34425ae7f34defa3232b1e"
+    },
+    {
+      "Path": "backend/src/plans/plans.module.ts",
+      "SHA256": "a9010b510b8e9f7876bdfcb21df4638baa4bf4553844102b80abf942d782a68d"
+    },
+    {
+      "Path": "backend/src/plans/plans.service.ts",
+      "SHA256": "90d4b49692474281ce1d14c813f471306986497fef64e94b17422cc0146d11d7"
+    },
+    {
+      "Path": "backend/src/plans/systems.controller.ts",
+      "SHA256": "c1f405f41cce889cccd06bb638a9b60fd08ba3d7ea36d539e0f757bb54bf5517"
+    },
+    {
+      "Path": "backend/src/releases/release-policy.ts",
+      "SHA256": "af3847dd46628e0fcbf87bd10e4f3e35e471868732aedeb36a2d765f18cf1fc2"
+    },
+    {
+      "Path": "backend/src/subscriptions/subscriptions.service.ts",
+      "SHA256": "9904c21e7de10fec3f911399d72e4924360ab1c15528e44a71ce67abf607dd3e"
+    },
+    {
+      "Path": "backend/test/annual-discount.test.cjs",
+      "SHA256": "df8ec230051b615668bd1bee502ff8ec48835830cacabbd932f4c206ba145d98"
+    },
+    {
+      "Path": "backend/test/billing-postgres.cjs",
+      "SHA256": "ecbca029b9f6d8abb24c07e7f271d52607a1a8f42dbb5cfb5df184cb89415e3b"
+    },
+    {
+      "Path": "backend/test/billing-pricing.test.cjs",
+      "SHA256": "5addb8857df4e00ebd090c9230854f6463892bd6072762bc33f4ecd962a38b3d"
+    },
+    {
+      "Path": "backend/test/portal-systems.test.cjs",
+      "SHA256": "433823816b8335215bca953525709dfa6850711078ba348b751b75283d8dd517"
+    },
+    {
+      "Path": "backend/test/systems-postgres.cjs",
+      "SHA256": "52eb191778837bbbc2e62c4b37714f5396098179de04391038bb35d5d90e653f"
+    },
+    {
+      "Path": "frontend/src/App.tsx",
+      "SHA256": "f474dc34c855f2a81dc003d82638adca15bd33445a7fb6f66b0e1922033ddf8a"
+    },
+    {
+      "Path": "frontend/src/lib/billing-prices.ts",
+      "SHA256": "2af64eb448a386dc0ce89221ca546526d58649f9481f55a091e648027951fb13"
+    },
+    {
+      "Path": "frontend/src/lib/navigation.ts",
+      "SHA256": "98c3d5bd06ab4118e725eb100fb66d941152d4b092cd2ed049271d2576fd496e"
+    },
+    {
+      "Path": "frontend/src/lib/portal-api.ts",
+      "SHA256": "a009686aa57e3abc87622f70227018127802b28b2293f16af30ea0768fc1ea5a"
+    },
+    {
+      "Path": "frontend/src/lib/portal-navigation.ts",
+      "SHA256": "adb466bea1743a5ffef01823890f64c2099d3b91c49b0145fbda51e4585d452e"
+    },
+    {
+      "Path": "frontend/src/pages/plan-form-dialog.tsx",
+      "SHA256": "804563f24ead891c3f348f947a70b01f80c25ed8bdbc7e6f12502e6c4b076444"
+    },
+    {
+      "Path": "frontend/src/pages/portal-download.tsx",
+      "SHA256": "6619b206492a06e899ba32b73d3bb4e9094f7e36533ae0d2753d09c0ced5edc1"
+    },
+    {
+      "Path": "frontend/src/pages/portal-my-subscriptions.tsx",
+      "SHA256": "241b6d0853006b1a6dad2b372b99ff171bdc9030be9e8ef96b7e9b36dcbca3ed"
+    },
+    {
+      "Path": "frontend/src/pages/portal-subscription.tsx",
+      "SHA256": "330fc50538d962482b295f7d21fc75b3b4a29e60dd1481fc66848a2aa7ceee77"
+    },
+    {
+      "Path": "frontend/src/pages/portal-systems.tsx",
+      "SHA256": "f1db83c438b9cd71a35717d9c14bdb791c2bb9edcfa9ed3def2e4a7eee65aaba"
+    },
+    {
+      "Path": "frontend/src/pages/subscription-upgrade-dialog.tsx",
+      "SHA256": "35b22f724bc534ac3a60f47fc821d85b2cfb50f74d6c58eaac6af7dd54c74347"
+    },
+    {
+      "Path": "frontend/src/pages/systems.tsx",
+      "SHA256": "23605f2f031a433bfddd5a76964c0617862e0d7abf89ad1b37e39e9721a68edb"
+    },
+    {
+      "Path": "frontend/src/types/index.ts",
+      "SHA256": "8b0aeeea69a996a12787bca4c76a759c374020886aff8ce7ba472d8cba90918b"
+    }
+  ]
+}

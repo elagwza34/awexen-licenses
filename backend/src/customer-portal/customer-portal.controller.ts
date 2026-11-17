@@ -137,6 +137,11 @@ export class CustomerPortalController {
   @Public()
   publicCatalogue() { return this.portal.catalogue(); }
 
+  @Get('systems')
+  @Public()
+  @UseGuards(CustomerJwtGuard)
+  systems() { return this.portal.systems(); }
+
   @Post('billing-quote')
   @Public()
   @UseGuards(CustomerJwtGuard)

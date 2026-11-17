@@ -373,7 +373,22 @@ model Feature {
   @@map("features")
 }
 
+model SoftwareSystem {
+  id Int @id @default(autoincrement())
+  key String @unique @db.VarChar(60)
+  name String @db.VarChar(120)
+  nameAr String @map("name_ar") @db.VarChar(120)
+  description String?
+  active Boolean @default(true)
+  plans Plan[]
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  @@map("software_systems")
+}
+
 model Plan {
+  systemId Int @default(1) @map("system_id")
+  system SoftwareSystem @relation(fields: [systemId], references: [id], onDelete: Restrict)
   id              Int             @id @default(autoincrement())
   key             String          @unique @db.VarChar(60)
   name            String          @db.VarChar(120)

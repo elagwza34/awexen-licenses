@@ -1,5 +1,5 @@
-import {minorUnits} from '@/lib/billing-prices';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import {annualMinorUnits,minorUnits} from '@/lib/billing-prices';
+import { useMutation, useQuery,useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import {
@@ -39,6 +39,7 @@ interface PlanFormProps {
 }
 
 interface FormState {
+  systemId:number;
   key: string;
   name: string;
   nameAr?: string;
@@ -56,6 +57,7 @@ interface FormState {
 
 function toFormState(plan: Plan | null): FormState {
   return {
+    systemId:plan?.systemId??1,
     key: plan?.key ?? '',
     name: plan?.name ?? '',
     nameAr: plan?.nameAr ?? '',
@@ -79,11 +81,13 @@ function toFormState(plan: Plan | null): FormState {
  * before sending, because the API stores integers only.
  */
 export function PlanFormDialog({ open, plan, features, onOpenChange }: PlanFormProps) {
+  const systems=useQuery({queryKey:['systems'],queryFn:()=>api.get<{data:{id:number;nameAr:string}[]}>('/systems'),enabled:open});
   const queryClient = useQueryClient();
   const toast = useToast();
   const isEdit = Boolean(plan);
 
   const [form, setForm] = useState<FormState>(() => toFormState(plan));
+  const calculatedAnnual=(()=>{try{const monthly=minorUnits(form.monthlyPrice,true)??(form.billingInterval==='MONTHLY'?minorUnits(form.price)!:0);return monthly>0?annualMinorUnits(monthly):0;}catch{return 0;}})();
   const [selected, setSelected] = useState<number[]>(plan?.features?.map((f) => f.feature.id) ?? []);
   useEffect(() => {
     if (open) {
@@ -95,12 +99,13 @@ export function PlanFormDialog({ open, plan, features, onOpenChange }: PlanFormP
   const save = useMutation({
     mutationFn: () => {
       const payload = {
+        systemId:form.systemId,
         key: form.key.trim().toUpperCase(),
         name: form.name.trim(),
         nameAr: form.nameAr?.trim() || undefined,
         description: form.description?.trim() || undefined,
         price: minorUnits(form.price)!,
-        monthlyPrice: minorUnits(form.monthlyPrice,true), yearlyPrice: minorUnits(form.yearlyPrice,true),
+        monthlyPrice: minorUnits(form.monthlyPrice,true), yearlyPrice: calculatedAnnual>0?calculatedAnnual:minorUnits(form.yearlyPrice,true),
         setupFee: minorUnits(form.setupFee)!,
         currency: form.currency.trim().toUpperCase(),
         billingInterval: form.billingInterval,
@@ -148,6 +153,7 @@ export function PlanFormDialog({ open, plan, features, onOpenChange }: PlanFormP
           }}
         >
           <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="النظام"><select aria-label="النظام" className="min-h-11 w-full rounded-md border bg-background p-2" disabled={isEdit} value={form.systemId} onChange={e=>setForm({...form,systemId:Number(e.target.value)})}>{systems.data?.data.map(system=><option key={system.id} value={system.id}>{system.nameAr}</option>)}</select></Field>
             <Field label="المفتاح (EN) *">
               <Input value={form.key} onChange={(e) => setForm({ ...form, key: e.target.value })}
                 placeholder="PROFESSIONAL" dir="ltr" className="text-start font-mono" disabled={isEdit} />
@@ -173,8 +179,8 @@ export function PlanFormDialog({ open, plan, features, onOpenChange }: PlanFormP
               <p className="text-xs text-muted-foreground">فارغ: استخدام السعر الأساسي إذا كانت مدته شهرية. صفر: إيقاف بيع الشهر.</p>
             </Field>
             <Field label="السعر السنوي">
-              <Input aria-label="السعر السنوي" type="number" step="0.01" min="0" value={form.yearlyPrice} onChange={e=>setForm({...form,yearlyPrice:e.target.value})} dir="ltr" />
-              <p className="text-xs text-muted-foreground">حدد السعر السنوي صراحةً؛ لا يُحسب تلقائيًا من سعر الشهر.</p>
+              <Input aria-label="السعر السنوي" readOnly value={calculatedAnnual>0?String(calculatedAnnual/100):form.yearlyPrice} dir="ltr" />
+              <p className="text-xs text-muted-foreground">يُحسب تلقائيًا: 12 شهرًا بخصم 15%. رسوم التأسيس غير مشمولة في هذا الرقم.</p>
             </Field>
             <Field label="رسوم التفعيل لأول مرة">
               <Input type="number" step="0.01" min="0" value={form.setupFee} onChange={(e) => setForm({ ...form, setupFee: e.target.value })} dir="ltr" />

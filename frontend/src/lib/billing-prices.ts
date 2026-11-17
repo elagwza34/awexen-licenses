@@ -10,3 +10,11 @@ export function minorUnits(value: string, optional = false): number | null {
     throw new Error("السعر أكبر من الحد المسموح.");
   return result;
 }
+export function annualMinorUnits(monthly: number): number {
+  if (!Number.isSafeInteger(monthly) || monthly < 0)
+    throw new Error("Invalid monthly price");
+  const annual = Number((BigInt(monthly) * 102n + 5n) / 10n);
+  if (annual > 2147483647)
+    throw new Error("Annual price exceeds the supported range");
+  return annual;
+}

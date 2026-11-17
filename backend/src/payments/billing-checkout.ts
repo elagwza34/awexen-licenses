@@ -5,6 +5,7 @@ import {
 } from "@nestjs/common";
 import { AuditEntity } from "@prisma/client";
 import { billingQuote, entitlementHash } from "../plans/billing-pricing";
+import { setupAlreadyPaid } from "./setup-fee-policy";
 
 export async function createBillingQuote(
   prisma: any,
@@ -20,9 +21,14 @@ export async function createBillingQuote(
     );
   const plan = await prisma.plan.findUnique({
     where: { id: input.planId },
-    include: { features: { include: { feature: true } } },
+    include: { system: true, features: { include: { feature: true } } },
   });
-  if (!plan || plan.status !== "ACTIVE" || !plan.enforceEntitlements)
+  if (
+    !plan ||
+    plan.status !== "ACTIVE" ||
+    !plan.enforceEntitlements ||
+    plan.system?.active === false
+  )
     throw new BadRequestException("The selected plan is not available.");
   const subscription = input.subscriptionId
     ? await prisma.subscription.findFirst({
@@ -34,6 +40,19 @@ export async function createBillingQuote(
     : null;
   if (input.subscriptionId && !subscription)
     throw new NotFoundException("Subscription not found.");
+  if (
+    subscription &&
+    (subscription.plan.systemId ?? 1) !== (plan.systemId ?? 1)
+  )
+    throw new BadRequestException(
+      "A subscription cannot change to a different software system.",
+    );
+  if (plan.systemId)
+    customer.downloadEnabled = await setupAlreadyPaid(
+      prisma,
+      customer,
+      plan.systemId,
+    );
   const data = billingQuote(
     plan,
     customer,
@@ -80,11 +99,12 @@ export async function submitBillingQuote(
     await tx.$queryRaw`SELECT id FROM plans WHERE id=${q.planId} FOR UPDATE`;
     const plan = await tx.plan.findUnique({
       where: { id: q.planId },
-      include: { features: { include: { feature: true } } },
+      include: { system: true, features: { include: { feature: true } } },
     });
     if (
       !plan ||
       plan.status !== "ACTIVE" ||
+      plan.system?.active === false ||
       !plan.enforceEntitlements ||
       (plan.updatedAt?.toISOString?.() ?? null) !== q.planVersion ||
       entitlementHash(plan) !== q.entitlementHash
@@ -92,6 +112,15 @@ export async function submitBillingQuote(
       throw new ConflictException(
         "Plan changed. Refresh the quote before submitting payment.",
       );
+    if (q.setupFee > 0 && plan.systemId) {
+      const customer = await tx.customer.findUniqueOrThrow({
+        where: { id: customerId },
+      });
+      if (await setupAlreadyPaid(tx, customer, plan.systemId))
+        throw new ConflictException(
+          "Setup was already paid. Refresh the quote without the one-time fee.",
+        );
+    }
     if (q.sourceSubscriptionId) {
       await tx.$queryRaw`SELECT id FROM subscriptions WHERE id=${q.sourceSubscriptionId} FOR UPDATE`;
       const source = await tx.subscription.findUnique({
@@ -176,16 +205,25 @@ export async function approveBillingQuote(
     await tx.$queryRaw`SELECT id FROM plans WHERE id=${q.planId} FOR UPDATE`;
     const plan = await tx.plan.findUniqueOrThrow({
       where: { id: q.planId },
-      include: { features: { include: { feature: true } } },
+      include: { system: true, features: { include: { feature: true } } },
     });
     if (
       plan.status !== "ACTIVE" ||
+      plan.system?.active === false ||
       !plan.enforceEntitlements ||
       plan.updatedAt.toISOString() !== q.planVersion ||
       entitlementHash(plan) !== q.entitlementHash
     )
       throw new ConflictException(
         "Plan changed after quotation. Review and requote this payment.",
+      );
+    if (
+      q.setupFee > 0 &&
+      plan.systemId &&
+      (await setupAlreadyPaid(tx, customer, plan.systemId))
+    )
+      throw new ConflictException(
+        "Setup was already paid. Review and requote without the one-time fee.",
       );
     if (dto.maxDevices !== undefined && dto.maxDevices !== plan.maxDevices)
       throw new ConflictException(

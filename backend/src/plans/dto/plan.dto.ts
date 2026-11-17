@@ -16,6 +16,8 @@ import {
 } from 'class-validator';
 
 export class CreatePlanDto {
+  @IsOptional() @IsInt() @Min(1)
+  systemId?: number;
   @IsOptional() @Type(() => Number) @IsInt() @Min(0) @Max(2147483647) setupFee?: number;
   @IsOptional() @IsBoolean() enforceEntitlements?: boolean;
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(10000) maxUsers?: number;
