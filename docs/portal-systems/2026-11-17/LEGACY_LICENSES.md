@@ -16,3 +16,9 @@ The page reads the existing owner-scoped overview and subscription endpoints. Li
 Run the frontend on port 4180. Install Playwright in a test tools directory and set `PLAYWRIGHT_MODULE` to its module path, or make it available through Node resolution. Set `CHROME_PATH` only when using an installed Chrome instead of Playwright's browser. Then run `node frontend/tests/legacy-subscriptions.cjs` from the repository root.
 
 `LEGACY_PORTAL_ORIGIN` selects a local or hosted frontend; `LEGACY_PORTAL_OUTPUT` selects the evidence directory. All API responses are intercepted synthetic fixtures, including authentication. The hosted check verifies deployed UI assets and does not sign into or mutate a real customer account.
+
+## Publication
+
+Published source commit `cd6bf3a` to `https://licenses.awexen.com` on 2026-11-17. Uploaded only the changed JavaScript asset and then `index.html`; verified hosted asset bytes and SPA build references. No API deployment, migration or license mutation was performed. Git auto-deployment remains disabled to preserve hosted downloads.
+
+All five browser cases also pass against the hosted frontend with synthetic API responses. A separate read-only production comparison confirmed that all selected account, license, subscription and payment metadata remained unchanged. All five existing installer links retain their expected sizes. Private account inspection evidence stays outside version control.
