@@ -7,5 +7,7 @@ Options -Indexes
   RewriteRule ^ - [L]
   # Missing assets must remain 404 instead of receiving the application HTML.
   RewriteRule ^assets/ - [L]
+  # A missing installer must return 404, never the application's HTML.
+  RewriteRule ^downloads/ - [L]
   RewriteRule ^ index.html [L]
 </IfModule>
