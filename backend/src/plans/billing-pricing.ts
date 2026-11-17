@@ -23,6 +23,9 @@ export function entitlementHash(plan: any) {
           plan.maxWarehouses,
         ],
         enforced: plan.enforceEntitlements,
+        ...(plan.includedServices?.length
+          ? { includedServices: [...plan.includedServices].sort() }
+          : {}),
         // Preserve the frozen hashes of PMS quotes created before the registry.
         ...(plan.systemId && plan.systemId !== 1
           ? { systemId: plan.systemId }

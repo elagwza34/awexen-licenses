@@ -6,12 +6,12 @@ export const PMS_FEATURES = {
   MULTI_WAREHOUSE: 'عدة مخازن', MULTI_BRANCH: 'عدة فروع',
 } as const;
 const BASIC = ['PRODUCTS','INVENTORY','SALES','POS','CUSTOMERS','REPORTS'];
-const PRO = [...BASIC,'SUPPLIERS','PURCHASES','EMPLOYEES','ATTENDANCE','IMPORT','EXPORT','ADVANCED_REPORTS','MULTI_WAREHOUSE'];
+const PRO = [...BASIC,'SUPPLIERS','PURCHASES','EMPLOYEES','ATTENDANCE','IMPORT','EXPORT','ADVANCED_REPORTS','MULTI_WAREHOUSE','MULTI_BRANCH'];
 /** Archived templates require an explicit price and activation before customers can select them. */
 export const PMS_PLAN_PRESETS = [
-  {key:'PMS_STARTER',name:'PMS Starter',nameAr:'بداية',maxUsers:2,maxBranches:1,maxWarehouses:1,maxDevices:1,features:BASIC},
-  {key:'PMS_PRO',name:'PMS Professional',nameAr:'احترافي',maxUsers:5,maxBranches:1,maxWarehouses:3,maxDevices:1,features:PRO},
-  {key:'PMS_BUSINESS',name:'PMS Business',nameAr:'أعمال',maxUsers:20,maxBranches:5,maxWarehouses:20,maxDevices:3,features:[...PRO,'MULTI_BRANCH']},
+  {key:'PMS_STARTER',name:'PMS Starter',nameAr:'الأساسية',maxUsers:1,maxBranches:1,maxWarehouses:1,maxDevices:1,features:BASIC,includedServices:[]},
+  {key:'PMS_PRO',name:'PMS Professional',nameAr:'النمو',maxUsers:5,maxBranches:2,maxWarehouses:2,maxDevices:4,features:PRO,includedServices:['WOOCOMMERCE_SETUP']},
+  {key:'PMS_BUSINESS',name:'PMS Business',nameAr:'المتقدمة',maxUsers:20,maxBranches:5,maxWarehouses:5,maxDevices:10,features:PRO,includedServices:['WOOCOMMERCE_SETUP','SHIPPING_SETUP']},
 ];
 export function validatePmsPolicy(features:string[],limits:{maxBranches:number;maxWarehouses:number}):string|undefined {
   const selected=new Set(features);

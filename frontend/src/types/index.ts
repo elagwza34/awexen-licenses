@@ -70,6 +70,7 @@ export interface Feature {
 }
 
 export interface Plan {
+  includedServices?: string[];
   systemId:number;
   system?:{id:number;key:string;name:string;nameAr:string};
   monthlyPrice?: number | null; yearlyPrice?: number | null;

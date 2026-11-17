@@ -38,7 +38,10 @@ interface PlanFormProps {
   onOpenChange: (open: boolean) => void;
 }
 
+import { PLAN_SERVICE_LABELS } from '@/lib/plan-services';
+
 interface FormState {
+  includedServices: string[];
   systemId:number;
   key: string;
   name: string;
@@ -57,6 +60,7 @@ interface FormState {
 
 function toFormState(plan: Plan | null): FormState {
   return {
+    includedServices: plan?.includedServices ?? [],
     systemId:plan?.systemId??1,
     key: plan?.key ?? '',
     name: plan?.name ?? '',
@@ -71,7 +75,7 @@ function toFormState(plan: Plan | null): FormState {
     billingInterval: plan?.billingInterval ?? 'MONTHLY',
     trialDays: String(plan?.trialDays ?? 0),
     maxDevices: String(plan?.maxDevices ?? 1),
-    maxUsers: String(plan?.maxUsers ?? 2), maxBranches: String(plan?.maxBranches ?? 1), maxWarehouses: String(plan?.maxWarehouses ?? 1), enforceEntitlements: true,
+    maxUsers: String(plan?.maxUsers ?? 1), maxBranches: String(plan?.maxBranches ?? 1), maxWarehouses: String(plan?.maxWarehouses ?? 1), enforceEntitlements: true,
     sortOrder: String(plan?.sortOrder ?? 0),
   };
 }
@@ -99,6 +103,7 @@ export function PlanFormDialog({ open, plan, features, onOpenChange }: PlanFormP
   const save = useMutation({
     mutationFn: () => {
       const payload = {
+        includedServices: form.includedServices,
         systemId:form.systemId,
         key: form.key.trim().toUpperCase(),
         name: form.name.trim(),
@@ -240,6 +245,18 @@ export function PlanFormDialog({ open, plan, features, onOpenChange }: PlanFormP
           <div className="grid grid-cols-3 gap-3">
           {([['maxUsers','المستخدمون النشطون'],['maxBranches','الفروع النشطة'],['maxWarehouses','المخازن النشطة']] as const).map(([key,label])=><div key={key}><Label>{label}</Label><Input type="number" min="1" value={form[key]} onChange={event=>setForm({...form,[key]:event.target.value})}/></div>)}
         </div>
+        <fieldset className="space-y-2 rounded-lg border p-4">
+          <legend className="px-2 font-medium">خدمات تجهيز مشمولة</legend>
+          <p className="text-sm text-muted-foreground">يتم تجهيز الربط بالتنسيق مع العميل بعد الاشتراك.</p>
+          {Object.entries(PLAN_SERVICE_LABELS).map(([key, label]) => (
+            <label key={key} className="flex min-h-11 cursor-pointer items-center gap-3">
+              <input type="checkbox" checked={form.includedServices.includes(key)} onChange={event => setForm(current => ({
+                ...current, includedServices: event.target.checked ? [...current.includedServices, key] : current.includedServices.filter(value => value !== key),
+              }))} />
+              <span>{label}</span>
+            </label>
+          ))}
+        </fieldset>
         <p className="text-sm">تُطبّق مميزات وحدود هذه الخطة تلقائيًا داخل PMS.</p>
         {plan && !plan.enforceEntitlements && <p className="text-sm text-destructive">هذه خطة قديمة غير مقيّدة. حفظها يفعّل المميزات والحدود المختارة على تراخيصها عند تحديث الترخيص.</p>}
         {selectionError && <p role="alert" className="text-sm text-destructive">{selectionError}</p>}

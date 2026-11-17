@@ -9,7 +9,8 @@ test('enforced plans require a compatible client and reject missing or malformed
 test('all three PMS presets have valid dependencies and distinct installation limits',()=>{
  assert.equal(PMS_PLAN_PRESETS.length,3);
  for(const p of PMS_PLAN_PRESETS)assert.equal(validatePmsPolicy(p.features,p),undefined);
- assert.deepEqual(PMS_PLAN_PRESETS.map(p=>[p.maxUsers,p.maxBranches,p.maxWarehouses]),[[2,1,1],[5,1,3],[20,5,20]]);
+ assert.deepEqual(PMS_PLAN_PRESETS.map(p=>[p.maxUsers,p.maxBranches,p.maxWarehouses,p.maxDevices]),[[1,1,1,1],[5,2,2,4],[20,5,5,10]]);
+ assert.deepEqual(PMS_PLAN_PRESETS.map(p=>p.includedServices),[[],['WOOCOMMERCE_SETUP'],['WOOCOMMERCE_SETUP','SHIPPING_SETUP']]);
 });
 test('unsupported integrations and incomplete capability sets cannot be sold as enforced PMS plans',()=>{
  assert.ok(validatePmsPolicy(['PRODUCTS','WOOCOMMERCE'],{maxBranches:1,maxWarehouses:1}));

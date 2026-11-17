@@ -5,6 +5,7 @@ import { useForm } from 'react-hook-form';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { setPortalToken, type PortalPlan } from '@/lib/portal-api';
 import { money } from '@/lib/portal-format';
+import { checkoutDestination, parseBillingInterval } from '@/lib/checkout-selection';
 import { AlertCircle, Eye, EyeOff, KeyRound } from 'lucide-react';
 import { z } from 'zod';
 import { Button } from '@/components/ui/button';
@@ -58,6 +59,9 @@ export function CustomerRegisterPage() {
   const planKey = search.get('plan') || undefined;
   const catalogue = useQuery({ queryKey: ['public', 'plans'], queryFn: () => api.get<{plans: PortalPlan[]}>('/portal/public-catalogue'), enabled: Boolean(planKey) });
   const selected = catalogue.data?.plans.find(p => p.key === planKey);
+  const interval = parseBillingInterval(search.get('billingInterval'));
+  const option = selected?.billingOptions.find(p => p.billingInterval === interval);
+  const destination = checkoutDestination(option ? selected : undefined, interval ?? 'MONTHLY');
 
 
   const {
@@ -90,7 +94,7 @@ export function CustomerRegisterPage() {
       }),
     onSuccess: (result) => {
       setPortalToken(result.accessToken);
-      navigate('/portal/subscription', { replace: true });
+      navigate(destination, { replace: true });
     },
   });
 
@@ -98,7 +102,8 @@ export function CustomerRegisterPage() {
 
   return (
     <RegisterForm
-      selection={selected ? `${selected.nameAr ?? selected.name} · ${money(selected.price, selected.currency)} ${selected.billingInterval === 'YEARLY' ? 'سنوياً' : 'شهرياً'} + ${money(selected.setupFee, selected.currency)} تفعيل لأول مرة` : planKey ? (catalogue.isError ? 'تعذّر تحميل الخطة. أعد تحميل الصفحة للمحاولة.' : catalogue.data ? 'هذه الخطة غير متاحة. اختر خطة من صفحة الموقع.' : 'جاري مراجعة الخطة المختارة…') : undefined}
+      selection={selected && option ? `${selected.nameAr ?? selected.name} · ${money(option.price, selected.currency)} ${interval === 'YEARLY' ? 'سنوياً' : 'شهرياً'} + ${money(selected.setupFee, selected.currency)} تفعيل لأول مرة` : planKey ? (catalogue.isError ? 'تعذّر تحميل الخطة. أعد تحميل الصفحة للمحاولة.' : catalogue.data ? 'الخطة أو المدة غير متاحة. اختر من الباقات الحالية.' : 'جاري مراجعة الخطة المختارة…') : undefined}
+      loginDestination={planKey && !option ? undefined : destination}
       register={register}
       handleSubmit={handleSubmit}
       errors={errors}
@@ -110,7 +115,8 @@ export function CustomerRegisterPage() {
             : 'تعذّر إنشاء الحساب. حاول مرة أخرى.'
           : null
       }
-      pending={mutation.isPending || Boolean(planKey && !selected)}
+      pending={mutation.isPending}
+      selectionBlocked={Boolean(planKey && (!selected || !option))}
     />
   );
 }
@@ -122,10 +128,12 @@ type RegisterProps = {
   onSubmit: (values: RegisterValues) => void;
   error: string | null;
   pending: boolean;
+  selectionBlocked: boolean;
   selection?: string;
+  loginDestination?: string;
 };
 
-function RegisterForm({ register, handleSubmit, errors, onSubmit, error, pending, selection }: RegisterProps) {
+function RegisterForm({ register, handleSubmit, errors, onSubmit, error, pending, selectionBlocked, selection, loginDestination }: RegisterProps) {
   return (
     <div className="flex min-h-screen items-center justify-center bg-muted/40 p-4">
       <div className="w-full max-w-lg">
@@ -200,7 +208,7 @@ function RegisterForm({ register, handleSubmit, errors, onSubmit, error, pending
 
               <PasswordFields register={register} errors={errors} />
 
-              <Button type="submit" className="w-full" isLoading={pending}>
+              <Button type="submit" className="w-full" isLoading={pending} disabled={selectionBlocked}>
                 إنشاء الحساب
               </Button>
             </form>
@@ -209,9 +217,9 @@ function RegisterForm({ register, handleSubmit, errors, onSubmit, error, pending
 
         <p className="mt-4 text-center text-sm text-muted-foreground">
           لديك حساب بالفعل؟{' '}
-          <Link to="/portal/login" className="font-medium text-primary underline">
+          {loginDestination ? <Link to="/portal/login" state={{ from: loginDestination }} className="font-medium text-primary underline">
             تسجيل الدخول
-          </Link>
+          </Link> : <span aria-disabled="true" className="text-muted-foreground">تسجيل الدخول</span>}
         </p>
       </div>
     </div>

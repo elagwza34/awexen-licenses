@@ -387,6 +387,7 @@ export class CustomerPortalService {
         maxDevices: true,
         description: true,
         setupFee: true,
+        includedServices: true,
         enforceEntitlements: true,
         maxUsers: true,
         maxBranches: true,

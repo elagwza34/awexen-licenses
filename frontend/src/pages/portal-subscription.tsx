@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {Link,useParams,useSearchParams} from 'react-router-dom';
 import { AlertCircle, Loader2, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -14,6 +14,8 @@ import { Input, Label, Textarea } from "@/components/ui/input";
 import { money } from "@/lib/portal-format";
 import { portalApi } from "@/lib/portal-api";
 import {Tabs,TabsList,TabsTrigger} from '@/components/ui/tabs';
+import { resolveCheckoutSelection } from '@/lib/checkout-selection';
+import { PLAN_SERVICE_LABELS } from '@/lib/plan-services';
 
 /** One plan catalogue; interval and subscription are explicit customer choices. */
 export function PortalSubscriptionPage() {
@@ -35,10 +37,18 @@ export function PortalSubscriptionPage() {
   const [planId, setPlanId] = useState<number | null>(null);
   const [interval, setInterval] = useState<"MONTHLY" | "YEARLY">("MONTHLY");
   const [subscriptionId, setSubscriptionId] = useState<number | null>(Number(parameters.get('subscriptionId'))||0);
+  const [selectionError, setSelectionError] = useState<string | null>(null);
+  const initializedSelection = useRef<string | null>(null);
   useEffect(() => {
-    if (customer.data?.requestedPlanId && !parameters.get('subscriptionId'))
-      setPlanId(customer.data.requestedPlanId);
-  }, [customer.data?.requestedPlanId]);
+    if (!catalogue.data || !customer.data || parameters.get('subscriptionId')) return;
+    const context = `${systemKey}:${parameters.toString()}:${customer.data.requestedPlanId ?? ''}`;
+    if (initializedSelection.current === context) return;
+    const selection = resolveCheckoutSelection(catalogue.data.plans, systemKey, parameters, customer.data.requestedPlanId);
+    setPlanId(selection.planId);
+    setInterval(selection.interval);
+    setSelectionError(selection.error ?? null);
+    initializedSelection.current = context;
+  }, [catalogue.data, customer.data, parameters, systemKey]);
   useEffect(() => {
     const source=subscriptions.data?.subscriptions.find(s=>s.id===Number(parameters.get('subscriptionId'))&&s.plan.system.key===systemKey);
     if(source){setPlanId(source.planId);setInterval(source.billingInterval==='YEARLY'?'YEARLY':'MONTHLY');setSubscriptionId(source.id);}
@@ -61,7 +71,7 @@ export function PortalSubscriptionPage() {
         billingInterval: interval,
         ...(subscriptionId ? { subscriptionId } : {}),
       }),
-    enabled: !!selected && subscriptionId !== null && !!customer.data,
+    enabled: !!selected && selected.billingOptions.some(p => p.billingInterval === interval) && subscriptionId !== null && !!customer.data,
     retry: false,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
@@ -113,7 +123,7 @@ export function PortalSubscriptionPage() {
       <div className="grid gap-4 sm:grid-cols-2">
         <div>
           <p id="billing-term-label" className="text-sm font-medium">مدة الاشتراك</p>
-          <Tabs dir="rtl" value={interval} onValueChange={value=>setInterval(value as 'MONTHLY'|'YEARLY')}>
+          <Tabs dir="rtl" value={interval} onValueChange={value=>{setInterval(value as 'MONTHLY'|'YEARLY');setSelectionError(null);}}>
             <TabsList aria-labelledby="billing-term-label" className="mt-2 grid h-auto w-full grid-cols-2"><TabsTrigger className="min-h-11" value="MONTHLY">شهري</TabsTrigger><TabsTrigger className="min-h-11" value="YEARLY">سنوي · خصم 15%</TabsTrigger></TabsList>
           </Tabs>
           <p className="mt-2 text-sm text-muted-foreground">السنوي: خصم 15% من قيمة 12 شهرًا. رسوم التأسيس منفصلة وتُدفع مرة واحدة.</p>
@@ -142,6 +152,7 @@ export function PortalSubscriptionPage() {
           لمتابعة القبول.
         </p>
       )}
+      {selectionError && <p role="alert" className="rounded-md border border-destructive p-4">{selectionError}</p>}
       {!plans.length && (
         <p role="status">لا توجد باقات متاحة للبيع حاليًا.</p>
       )}
@@ -156,7 +167,7 @@ export function PortalSubscriptionPage() {
               key={plan.id}
               disabled={!option || mutation.isPending}
               aria-pressed={planId === plan.id}
-              onClick={() => setPlanId(plan.id)}
+              onClick={() => {setPlanId(plan.id);setSelectionError(null);}}
               className={`rounded-lg border p-5 text-start ${planId === plan.id ? "border-primary ring-2 ring-primary" : ""} disabled:cursor-not-allowed disabled:opacity-50`}
             >
               <h2 className="font-bold">{plan.nameAr ?? plan.name}</h2>
@@ -175,6 +186,15 @@ export function PortalSubscriptionPage() {
               </p>
               {plan.description && (
                 <p className="mt-3 text-sm">{plan.description}</p>
+              )}
+              {!!plan.includedServices?.length && (
+                <div className="mt-4 border-t pt-3 text-sm">
+                  <p className="font-medium">خدمات تجهيز مشمولة</p>
+                  <ul className="mt-2 space-y-1">
+                    {plan.includedServices.filter(key => PLAN_SERVICE_LABELS[key]).map(key => <li key={key}>{PLAN_SERVICE_LABELS[key]}</li>)}
+                  </ul>
+                  <p className="mt-2 text-muted-foreground">يتم تجهيز الربط بالتنسيق بعد الاشتراك.</p>
+                </div>
               )}
             </button>
           );

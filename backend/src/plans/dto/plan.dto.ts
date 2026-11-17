@@ -3,6 +3,8 @@ import { BillingInterval, PlanStatus } from '@prisma/client';
 import { Type } from 'class-transformer';
 import {
   IsArray,
+  ArrayUnique,
+  IsIn,
   IsBoolean,
   IsEnum,
   IsInt,
@@ -16,6 +18,9 @@ import {
 } from 'class-validator';
 
 export class CreatePlanDto {
+  @ApiPropertyOptional({ description: 'Included human-provided setup services, separate from runtime feature grants.' })
+  @IsOptional() @IsArray() @ArrayUnique() @IsIn(['WOOCOMMERCE_SETUP', 'SHIPPING_SETUP'], { each: true })
+  includedServices?: string[];
   @IsOptional() @IsInt() @Min(1)
   systemId?: number;
   @IsOptional() @Type(() => Number) @IsInt() @Min(0) @Max(2147483647) setupFee?: number;
@@ -46,7 +51,7 @@ export class CreatePlanDto {
   @IsOptional() @Type(() => Number) @IsInt() @Min(0) @Max(2147483647)
   monthlyPrice?: number | null;
 
-  @ApiPropertyOptional({ description: 'Annual price in minor units; never inferred from monthly pricing.' })
+  @ApiPropertyOptional({ description: 'Annual price in minor units; monthly-priced plans derive twelve months with a 15% discount.' })
   @IsOptional() @Type(() => Number) @IsInt() @Min(0) @Max(2147483647)
   yearlyPrice?: number | null;
 

@@ -412,6 +412,8 @@ model Plan {
   isTrialPlan     Boolean         @default(false) @map("is_trial_plan")
 
   setupFee Int @default(0) @map("setup_fee")
+  /// Human-provided setup services; never treated as executable PMS capabilities.
+  includedServices String[] @default([]) @map("included_services")
   requestedBy Customer[] @relation("RequestedPlan")
   checkoutPayments Payment[]
   features      PlanFeature[]

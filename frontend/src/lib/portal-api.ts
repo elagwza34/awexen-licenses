@@ -49,6 +49,7 @@ export interface BillingQuote { id:string;expiresAt:string;planId:number;kind:st
 export interface SoftwareSystem {id:number;key:string;name:string;nameAr:string;description?:string|null;active?:boolean}
 export interface BillingSubscription {id:number;planId:number;billingInterval:string;startsAt:string;expiresAt:string|null;price:number;currency:string;status:string;plan:{key:string;name:string;nameAr:string|null;systemId:number;system:SoftwareSystem};licenses:{id:number;status:string;licenseKey:string;expiresAt:string|null}[]}
 export interface PortalPlan {
+  includedServices?: string[];
   systemId:number;
   system:SoftwareSystem;
   billingOptions: {billingInterval:'MONTHLY'|'YEARLY';price:number}[];
