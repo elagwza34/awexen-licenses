@@ -116,6 +116,7 @@ export function PortalLoginPage() {
               {mutation.isPending ? <Loader2 className="animate-spin" /> : <LogIn />}
               دخول
             </Button>
+            <Button type="button" variant="outline" className="w-full" onClick={()=>navigate('/portal/forgot-password')}>نسيت كلمة المرور؟</Button>
 
             <p className="text-center text-sm text-muted-foreground">
               ليس لديك حساب؟{' '}

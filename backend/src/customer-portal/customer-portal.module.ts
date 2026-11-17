@@ -4,6 +4,7 @@ import { PrismaModule } from '../common/prisma/prisma.module';
 import { PaymentsModule } from '../payments/payments.module';
 import { CustomerPortalController } from './customer-portal.controller';
 import { CustomerPortalService } from './customer-portal.service';
+import { CustomerPasswordRecoveryService,CustomerPasswordMailService } from './customer-password-recovery.service';
 
 /**
  * The customer-facing portal: sign-up, sign-in, licence overview and the
@@ -21,7 +22,7 @@ import { CustomerPortalService } from './customer-portal.service';
   // bank-transfer receipt before it is written to disk.
   imports: [PrismaModule, CryptoModule, PaymentsModule],
   controllers: [CustomerPortalController],
-  providers: [CustomerPortalService],
+  providers: [CustomerPortalService,CustomerPasswordRecoveryService,CustomerPasswordMailService],
   exports: [CustomerPortalService],
 })
 export class CustomerPortalModule {}

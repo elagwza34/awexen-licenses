@@ -16,6 +16,7 @@ import type { Request } from 'express';
 import { type AuditActor } from '../common/audit/audit.service';
 import { paginated, type PaginatedResponse, type PaginationQueryDto } from '../common/dto/pagination.dto';
 import { PrismaService } from '../common/prisma/prisma.service';
+import { latestEligibleRelease,planReleaseChannel } from './release-policy';
 
 export class CreateVersionDto {
   @ApiProperty({ example: '1.2.0' })
@@ -94,6 +95,11 @@ export class ReleasesService {
   async create(dto: CreateVersionDto, actor: AuditActor, req: Request) {
     const platform = dto.platform ?? Platform.WINDOWS;
     const channel = dto.channel ?? 'stable';
+    if(channel!=='stable'){
+      const planId=Number(channel.replace(/^stable-plan-/,''));
+      if(channel!==planReleaseChannel(planId)||!Number.isInteger(planId)||planId<=0||!await this.prisma.plan.findUnique({where:{id:planId}}))
+        throw new BadRequestException('Choose stable for every paid plan or a valid stable-plan-ID channel.');
+    }
 
     const clash = await this.prisma.appVersion.findFirst({
       where: { version: dto.version, buildNumber: dto.buildNumber, platform, channel },
@@ -135,6 +141,9 @@ export class ReleasesService {
    */
   async publish(id: number, actor: AuditActor, req: Request) {
     const version = await this.prisma.appVersion.findUniqueOrThrow({ where: { id } });
+    let url:URL;try{url=new URL(version.downloadUrl??'');}catch{throw new BadRequestException('Upload the installer and provide its HTTPS URL first.');}
+    if(url.protocol!=='https:'||!/^[a-f0-9]{64}$/i.test(version.checksum??'')||!version.fileSize||version.fileSize<=0)
+      throw new BadRequestException('A release requires an HTTPS installer URL, SHA256 and positive file size.');
 
     if (version.status === AppVersionStatus.PUBLISHED) {
       throw new ConflictException('Version is already published');
@@ -218,7 +227,7 @@ export class ReleasesService {
     const existing = await this.prisma.appVersion.findUniqueOrThrow({ where: { id } });
 
     // A published build's URL is what customers actually download.
-    if (existing.status === AppVersionStatus.PUBLISHED && dto.downloadUrl) {
+    if (existing.status === AppVersionStatus.PUBLISHED && Object.keys(dto).length) {
       throw new ConflictException(
         'A published version cannot have its download URL changed — publish a new build instead',
       );
@@ -252,15 +261,10 @@ export class ReleasesService {
    * `version` against its own and decides whether to prompt; it does not decide
    * whether it may run, which is the licence check's job.
    */
-  async latestFor(platform: string, channel = 'stable') {
-    const latest = await this.prisma.appVersion.findFirst({
-      where: {
-        status: AppVersionStatus.PUBLISHED,
-        platform: platform.toUpperCase() as Platform,
-        channel,
-      },
-      orderBy: [{ version: 'desc' }, { buildNumber: 'desc' }],
-    });
+  async latestFor(platform: string, channel = 'stable',planKey?:string) {
+    const plan=planKey?await this.prisma.plan.findUnique({where:{key:planKey},select:{id:true}}):null;
+    if(planKey&&!plan)return {data:null};
+    const latest=plan?await latestEligibleRelease(this.prisma,[plan.id],platform.toUpperCase()):await this.prisma.appVersion.findFirst({where:{status:AppVersionStatus.PUBLISHED,platform:platform.toUpperCase() as Platform,channel},orderBy:[{releasedAt:'desc'},{buildNumber:'desc'}]});
 
     if (!latest) return { data: null };
 

@@ -70,6 +70,7 @@ export interface Feature {
 }
 
 export interface Plan {
+  monthlyPrice?: number | null; yearlyPrice?: number | null;
   setupFee: number;
   enforceEntitlements: boolean;
   maxUsers: number;
@@ -112,6 +113,8 @@ export interface Subscription {
 }
 
 export interface Payment {
+  checkoutQuoteId?:string|null; billingAppliedAt?:string|null;
+  checkoutQuote?:{data:{kind:string;billingInterval:string;credit:number;serviceCharge:number;setupFee:number;periodEnd:string}}|null;
   planId?: number | null;
   id: number;
   customerId: number;

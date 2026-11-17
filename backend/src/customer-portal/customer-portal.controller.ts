@@ -8,6 +8,7 @@ import {
   Param,
   ParseIntPipe,
   Post,
+  Query,
   Req,
   Res,
   UploadedFile,
@@ -22,11 +23,13 @@ import { Public } from '../common/decorators';
 import { ReceiptStorageService } from '../payments/receipt-storage.service';
 import {
   ActivationRequestDto,
+  BillingQuoteDto,
   CustomerLoginDto,
   CustomerRegisterDto,
 } from './dto/customer-portal.dto';
 import { CustomerJwtGuard, CurrentCustomer } from './customer-jwt.guard';
 import { CustomerPortalService } from './customer-portal.service';
+import { CustomerPasswordRecoveryService,ForgotCustomerPasswordDto,ResetCustomerPasswordDto } from './customer-password-recovery.service';
 
 @ApiTags('Customer portal (public)')
 @Controller('portal')
@@ -34,7 +37,16 @@ export class CustomerPortalController {
   constructor(
     private readonly portal: CustomerPortalService,
     private readonly receipts: ReceiptStorageService,
+    private readonly recovery:CustomerPasswordRecoveryService,
   ) {}
+
+  @Public() @Post('forgot-password') @HttpCode(HttpStatus.OK)
+  @Throttle({default:{limit:5,ttl:60000}})
+  forgotPassword(@Body() dto:ForgotCustomerPasswordDto){return this.recovery.request(dto.email);}
+
+  @Public() @Post('reset-password') @HttpCode(HttpStatus.OK)
+  @Throttle({default:{limit:10,ttl:60000}})
+  resetPassword(@Body() dto:ResetCustomerPasswordDto){return this.recovery.reset(dto.token,dto.password);}
 
   @Public()
   @Post('register')
@@ -115,8 +127,8 @@ export class CustomerPortalController {
     summary: 'Resolve the installer download',
     description: 'Returns 403 PAYMENT_PENDING until the owner confirms payment.',
   })
-  download(@CurrentCustomer() customer: { id: number }) {
-    return this.portal.download(customer.id);
+  download(@CurrentCustomer() customer: { id: number },@Query('planKey') planKey?:string) {
+    return this.portal.download(customer.id,planKey);
   }
 
   // ------------------------------------------------------ activation request
@@ -124,6 +136,21 @@ export class CustomerPortalController {
   @Get('public-catalogue')
   @Public()
   publicCatalogue() { return this.portal.catalogue(); }
+
+  @Post('billing-quote')
+  @Public()
+  @UseGuards(CustomerJwtGuard)
+  @Throttle({default:{limit:20,ttl:60_000}})
+  billingQuote(@CurrentCustomer() customer:{id:number}, @Body() body:BillingQuoteDto) {
+    return this.portal.quote(customer.id,body);
+  }
+
+  @Get('billing-subscriptions')
+  @Public()
+  @UseGuards(CustomerJwtGuard)
+  billingSubscriptions(@CurrentCustomer() customer:{id:number}) {
+    return this.portal.billingSubscriptions(customer.id);
+  }
 
   @Get('catalogue')
   @Public()
@@ -215,6 +242,7 @@ export class CustomerPortalController {
       customer.id,
       {
         planId: Number(body.planId),
+        quoteId: body.quoteId, billingInterval: body.billingInterval,
         amount: Number(body.amount),
         notes: body.notes,
         subscriptionId: body.subscriptionId ? Number(body.subscriptionId) : undefined,

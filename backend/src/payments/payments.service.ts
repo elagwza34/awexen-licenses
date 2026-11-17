@@ -1,3 +1,4 @@
+import { approveBillingQuote } from './billing-checkout';
 import {
   BadRequestException,
   ConflictException,
@@ -75,6 +76,7 @@ export class PaymentsService {
         take: query.take,
         orderBy: this.buildOrderBy(query),
         include: {
+          checkoutQuote: {select:{data:true}},
           customer: { select: { id: true, name: true, company: true, email: true } },
           subscription: { select: { id: true, plan: { select: { name: true, nameAr: true } } } },
         },
@@ -102,6 +104,7 @@ export class PaymentsService {
     const payment = await this.prisma.payment.findUnique({
       where: { id },
       include: {
+        checkoutQuote: {select:{data:true}},
         customer: { select: { id: true, name: true, company: true, email: true } },
         subscription: { include: { plan: true } },
       },
@@ -230,6 +233,7 @@ export class PaymentsService {
   async update(id: number, dto: UpdatePaymentDto, actor: AuditActor, req: Request) {
     const existing = await this.prisma.payment.findUniqueOrThrow({ where: { id } });
 
+    if (existing.checkoutQuoteId) throw new ConflictException('Quoted subscription payments cannot be edited. Cancel and requote.');
     if (isSettled(existing.status)) {
       throw new ConflictException(
         'A verified payment cannot be edited. Use verify, reject or refund instead.',
@@ -275,6 +279,8 @@ export class PaymentsService {
       where: { id },
       include: { subscription: true },
     });
+
+    if (payment.checkoutQuoteId) { await this.approveActivation(id, { notes: dto.notes }, actor, req); return this.findOne(id); }
 
     // Initial purchases must deliver the licence as well as confirm the money.
     // Keep subscription payments on the existing renewal path.
@@ -350,6 +356,17 @@ export class PaymentsService {
   async reject(id: number, dto: RejectPaymentDto, actor: AuditActor, req: Request) {
     const payment = await this.prisma.payment.findUniqueOrThrow({ where: { id } });
 
+    if (payment.checkoutQuoteId) {
+      await this.prisma.$transaction(async tx=>{
+        await tx.$queryRaw`SELECT id FROM payments WHERE id=${id} FOR UPDATE`;
+        const current=await tx.payment.findUniqueOrThrow({where:{id}});
+        if(current.billingAppliedAt||current.status==='PAID'||current.status==='REFUNDED')throw new ConflictException('An applied subscription payment cannot be rejected.');
+        await tx.payment.update({where:{id},data:{status:'CANCELLED',notes:dto.reason}});
+        await this.audit.record({action:'payment.rejected',entity:AuditEntity.PAYMENT,entityId:id,oldValue:{status:current.status},newValue:{status:'CANCELLED',reason:dto.reason},tx},actor,req);
+      });
+      return this.findOne(id);
+    }
+
     if (payment.status === PaymentStatus.PAID) {
       throw new ConflictException('A verified payment cannot be rejected — refund it instead');
     }
@@ -382,6 +399,7 @@ export class PaymentsService {
   async refund(id: number, dto: RefundPaymentDto, actor: AuditActor, req: Request) {
     const payment = await this.prisma.payment.findUniqueOrThrow({ where: { id } });
 
+    if (payment.checkoutQuoteId) throw new ConflictException('A quoted subscription payment needs a reviewed billing reversal; a generic refund would discard prior paid service.');
     if (payment.status !== PaymentStatus.PAID) {
       throw new ConflictException('Only a verified payment can be refunded');
     }
@@ -492,6 +510,8 @@ export class PaymentsService {
       where: { id },
       include: { customer: true, subscription: true },
     });
+
+    if (payment.checkoutQuoteId) return approveBillingQuote(this.prisma,this.audit,this.licenses,id,dto,actor,req);
 
     if (isClosed(payment.status)) {
       throw new ConflictException(`A ${payment.status} payment cannot be approved`);

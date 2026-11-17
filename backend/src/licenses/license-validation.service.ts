@@ -1,3 +1,4 @@
+import { latestEligibleRelease } from '../releases/release-policy';
 import { Injectable, Logger } from '@nestjs/common';
 import { AuditEntity, DeviceStatus, LicenseStatus, ValidationStatus } from '@prisma/client';
 import type { Request } from 'express';
@@ -300,7 +301,7 @@ export class LicenseValidationService {
       }),
     ]);
 
-    const release = await this.resolveRelease(input.appVersion, input.platform);
+    const release = await this.resolveRelease(input.appVersion, input.platform,license.planId);
 
     const checkedAt = Date.now();
     const nextCheckAt = pms ? pmsLeaseWindow(license.expiresAt, checkedAt).nextCheckAt : Math.min(checkedAt + intervalMs,
@@ -359,14 +360,8 @@ export class LicenseValidationService {
    * Version check piggybacks on validation. Automatic updates are explicitly
    * out of scope — we only report what the admin published.
    */
-  private async resolveRelease(appVersion?: string, platform?: string) {
-    const latest = await this.prisma.appVersion.findFirst({
-      where: {
-        status: 'PUBLISHED',
-        ...(platform ? { platform: platform.toUpperCase() as any } : {}),
-      },
-      orderBy: [{ version: 'desc' }, { buildNumber: 'desc' }],
-    });
+  private async resolveRelease(appVersion?: string, platform?: string,planId?:number) {
+    const latest = planId?await latestEligibleRelease(this.prisma,[planId],platform?.toUpperCase()??'WINDOWS'):null;
 
     if (!latest) return null;
 

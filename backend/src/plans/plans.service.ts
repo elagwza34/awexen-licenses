@@ -1,3 +1,4 @@
+import { saleOptions } from './billing-pricing';
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { AuditEntity, PlanStatus, Prisma, SubscriptionStatus } from '@prisma/client';
 import type { Request } from 'express';
@@ -61,7 +62,7 @@ export class PlansService {
         throw new BadRequestException('يجب تطبيق مميزات وحدود الخطة داخل PMS عند إنشاء خطة أو تعديل مميزاتها.');
       return;
     }
-    if((dto.status??existing?.status??'ACTIVE')==='ACTIVE'&&(dto.price??existing?.price??0)<=0&&!(dto.isTrialPlan??existing?.isTrialPlan))throw new BadRequestException('حدد سعر الخطة قبل تفعيلها للبيع، أو عرّفها صراحةً كخطة تجربة.');
+    if((dto.status??existing?.status??'ACTIVE')==='ACTIVE'&&saleOptions({...existing,...dto}).length===0&&(dto.price??existing?.price??0)<=0&&!(dto.isTrialPlan??existing?.isTrialPlan))throw new BadRequestException('حدد سعر الخطة قبل تفعيلها للبيع، أو عرّفها صراحةً كخطة تجربة.');
     const features=dto.featureIds ? await this.prisma.feature.findMany({where:{id:{in:dto.featureIds}}}) : existing?.features?.map((x:any)=>x.feature) ?? [];
     if(dto.featureIds && (features.length!==new Set(dto.featureIds).size||new Set(dto.featureIds).size!==dto.featureIds.length))throw new BadRequestException('اختر مميزات موجودة بدون تكرار.');
     const error=validatePmsPolicy(features.map((x:any)=>x.key),{maxBranches:dto.maxBranches??existing?.maxBranches??1,maxWarehouses:dto.maxWarehouses??existing?.maxWarehouses??1});

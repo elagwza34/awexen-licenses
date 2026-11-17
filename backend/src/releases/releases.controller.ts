@@ -43,8 +43,9 @@ export class ReleasesController {
   latest(
     @Query('platform') platform = 'WINDOWS',
     @Query('channel') channel = 'stable',
+    @Query('planKey') planKey?:string,
   ) {
-    return this.releases.latestFor(platform, channel);
+    return this.releases.latestFor(platform, channel,planKey);
   }
 
   @Get(':id')

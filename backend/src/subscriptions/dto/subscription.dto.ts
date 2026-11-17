@@ -3,6 +3,7 @@ import { BillingInterval, SubscriptionStatus } from '@prisma/client';
 import { Type } from 'class-transformer';
 import {
   IsBoolean,
+  IsUUID,
   IsDateString,
   IsEnum,
   IsInt,
@@ -77,6 +78,8 @@ export class CancelSubscriptionDto {
 }
 
 export class ChangeSubscriptionPlanDto {
+  @IsOptional() @IsUUID() quoteId?: string;
+  @IsOptional() @IsEnum(BillingInterval) billingInterval?: BillingInterval;
   @ApiProperty() @Type(() => Number) @IsInt() @Min(1)
   planId!: number;
 

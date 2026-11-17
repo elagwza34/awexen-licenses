@@ -18,4 +18,9 @@ mkdirSync(dirname(keyPath), { recursive: true });
 const temporaryPath = `${keyPath}.tmp`;
 writeFileSync(temporaryPath, pem, { mode: 0o600 });
 renameSync(temporaryPath, keyPath);
+require('./scripts/restore-release-receipts.cjs').restoreReleaseReceipts(
+  resolve('.release-receipts.enc.json'),
+  resolve(process.env.RECEIPTS_DIR || 'storage/receipts'),
+  pem,
+);
 require('./dist/main.js');

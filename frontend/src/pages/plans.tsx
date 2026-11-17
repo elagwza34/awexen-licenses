@@ -116,8 +116,10 @@ export function PlansPage() {
               <CardContent className="flex-1 space-y-4">
                 <div>
                   <p className="text-2xl font-bold">
-                    {formatMoney(plan.price, plan.currency)}
+                    أسعار الاشتراك
                   </p>
+                  <p className="text-sm">شهري: {(plan.monthlyPrice??(plan.billingInterval==='MONTHLY'?plan.price:0))>0?formatMoney(plan.monthlyPrice??plan.price,plan.currency):'غير متاح'}</p>
+                  <p className="text-sm">سنوي: {(plan.yearlyPrice??(plan.billingInterval==='YEARLY'?plan.price:0))>0?formatMoney(plan.yearlyPrice??plan.price,plan.currency):'غير متاح'}</p>
                   <div className="mt-1 flex flex-wrap gap-1.5">
                     <BillingIntervalBadge value={plan.billingInterval} />
                     <Badge variant="secondary">

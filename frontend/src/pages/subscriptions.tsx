@@ -1,5 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
+import {useAuth} from '@/hooks/use-auth';
+import {SubscriptionUpgradeDialog} from './subscription-upgrade-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { DataTable, type Column } from '@/components/data-table';
@@ -31,6 +33,8 @@ const PRIORITY_VARIANTS: Record<string, 'muted' | 'secondary' | 'warning' | 'des
 };
 
 export function SubscriptionsPage() {
+  const {can}=useAuth();
+  const [upgrading,setUpgrading]=useState<Subscription|null>(null);
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState<SubscriptionStatus | ''>('');
@@ -44,6 +48,7 @@ export function SubscriptionsPage() {
   });
 
   const columns: Column<Subscription>[] = [
+    {key:'upgrade',header:'الاشتراك',cell:row=>can('subscriptions.update')&&can('plans.view')&&['ACTIVE','TRIAL','EXPIRED'].includes(row.status)?<Button size="sm" variant="outline" onClick={()=>setUpgrading(row)}>ترقية / تجديد</Button>:null},
     {
       key: 'customer',
       header: 'العميل',
@@ -98,6 +103,7 @@ export function SubscriptionsPage() {
 
   return (
     <div className="space-y-4">
+      {upgrading&&<SubscriptionUpgradeDialog subscription={upgrading} onClose={()=>setUpgrading(null)}/>}
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold">الاشتراكات</h1>

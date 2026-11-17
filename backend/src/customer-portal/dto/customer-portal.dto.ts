@@ -2,6 +2,8 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
   IsEmail,
+  IsIn,
+  IsUUID,
   IsInt,
   IsOptional,
   IsString,
@@ -77,7 +79,15 @@ export class CustomerLoginDto {
   password!: string;
 }
 
+export class BillingQuoteDto {
+  @Type(() => Number) @IsInt() @Min(1) planId!: number;
+  @IsIn(['MONTHLY','YEARLY']) billingInterval!: 'MONTHLY' | 'YEARLY';
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) subscriptionId?: number;
+}
+
 export class ActivationRequestDto {
+  @IsOptional() @IsUUID() quoteId?: string;
+  @IsOptional() @IsIn(['MONTHLY','YEARLY']) billingInterval?: 'MONTHLY' | 'YEARLY';
   @ApiProperty({ description: 'Plan the customer wants to activate.' })
   @Type(() => Number)
   @IsInt()

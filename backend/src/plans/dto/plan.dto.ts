@@ -40,6 +40,14 @@ export class CreatePlanDto {
   @Type(() => Number) @IsInt() @Min(0)
   price!: number;
 
+  @ApiPropertyOptional({ description: 'Monthly price in minor units; null uses the matching legacy price, zero disables this interval.' })
+  @IsOptional() @Type(() => Number) @IsInt() @Min(0) @Max(2147483647)
+  monthlyPrice?: number | null;
+
+  @ApiPropertyOptional({ description: 'Annual price in minor units; never inferred from monthly pricing.' })
+  @IsOptional() @Type(() => Number) @IsInt() @Min(0) @Max(2147483647)
+  yearlyPrice?: number | null;
+
   @ApiPropertyOptional({ default: 'EGP' }) @IsOptional() @IsString() @Length(3, 3)
   currency?: string;
 

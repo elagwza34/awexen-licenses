@@ -205,7 +205,7 @@ export function PaymentsPage() {
         <div className="flex gap-1.5">
           {/* A request that carries a receipt came from the customer portal, so
               one button confirms the money and issues the key in a single step. */}
-          {row.status === 'PENDING' && row.receiptUrl && canVerify && (
+          {row.status === 'PENDING' && (row.receiptUrl||row.checkoutQuoteId) && canVerify && (
             <Button
               size="sm"
               isLoading={acting === `approve-${row.id}`}
@@ -215,10 +215,10 @@ export function PaymentsPage() {
               }}
             >
               <KeyRound />
-              إصدار كود
+              {row.checkoutQuoteId?'مراجعة الاشتراك':'إصدار كود'}
             </Button>
           )}
-          {row.status === 'PENDING' && canVerify && (
+          {row.status === 'PENDING' && !row.checkoutQuoteId && canVerify && (
             <>
               <Button
                 size="sm"
@@ -228,7 +228,7 @@ export function PaymentsPage() {
                   confirm(
                     {
                       title: 'تأكيد الدفعة',
-                      description: 'سيتحوّل السجل إلى "مدفوع" ولن يكون قابلًا للتعديل بعدها.',
+                      description: row.checkoutQuoteId?'سيتم قبول الدفع وتطبيق الاشتراك والترخيص وفق عرض السعر المحفوظ. راجع التحصيل قبل القبول.':'سيتحوّل السجل إلى "مدفوع" ولن يكون قابلًا للتعديل بعدها.',
                       confirmLabel: 'تأكيد',
                     },
                     () => verify.mutate({ id: row.id, renew: false }),
@@ -238,7 +238,7 @@ export function PaymentsPage() {
                 <CheckCircle2 />
                 تأكيد
               </Button>
-              {row.subscriptionId && (
+              {row.subscriptionId && !row.checkoutQuoteId && (
                 <Button
                   size="sm"
                   variant="outline"
@@ -260,7 +260,8 @@ export function PaymentsPage() {
               )}
             </>
           )}
-          {row.status === 'PAID' && row.refundedAmount < row.amount && canRefund && (
+          {row.status==='PAID'&&row.checkoutQuoteId&&canRefund&&<span className="text-xs text-muted-foreground">الاسترداد يتطلب تسوية اشتراك يدوية</span>}
+          {row.status === 'PAID' && !row.checkoutQuoteId && row.refundedAmount < row.amount && canRefund && (
             <Button size="sm" variant="ghost" onClick={() => setRefunding(row)}>
               <Undo2 />
               استرداد
@@ -326,6 +327,15 @@ export function PaymentsPage() {
                   ) : null}
                 </p>
 
+                {approving.checkoutQuote && <div className="rounded-md border p-3 text-sm" role="note">
+                  <p>مدة الاشتراك: {approving.checkoutQuote.data.billingInterval==='YEARLY'?'سنوي':'شهري'}</p>
+                  <p>قيمة الخدمة: {formatMoney(approving.checkoutQuote.data.serviceCharge,approving.currency)}</p>
+                  <p>رصيد المدة المتبقية: {formatMoney(approving.checkoutQuote.data.credit,approving.currency)}</p>
+                  <p>رسوم التفعيل: {formatMoney(approving.checkoutQuote.data.setupFee,approving.currency)}</p>
+                  <p>انتهاء الفترة: {formatDate(approving.checkoutQuote.data.periodEnd)}</p>
+                  <p>التأكيد يطبّق الاشتراك والترخيص معًا؛ راجع الحوالة قبل الاعتماد.</p>
+                  {!approving.receiptUrl&&<p>لا يوجد مرفق حوالة؛ تحقّق من التحصيل خارجيًا قبل القبول.</p>}
+                </div>}
                 {approving.receiptUrl && (
                   <ReceiptLink
                     url={approving.receiptUrl}
@@ -339,6 +349,7 @@ export function PaymentsPage() {
                   <Label htmlFor="approve-plan">الباقة</Label>
                   <select
                     id="approve-plan"
+                    disabled={!!approving.checkoutQuoteId}
                     className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
                     value={approvePlanId}
                     onChange={(event) => setApprovePlanId(event.target.value)}
@@ -370,7 +381,7 @@ export function PaymentsPage() {
                     }
                   >
                     <KeyRound />
-                    تأكيد وإصدار الكود
+                    {approving.checkoutQuoteId?'قبول الدفع وتحديث الاشتراك':'تأكيد وإصدار الكود'}
                   </Button>
                 </DialogFooter>
               </>

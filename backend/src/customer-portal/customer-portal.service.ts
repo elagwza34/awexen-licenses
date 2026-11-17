@@ -1,3 +1,5 @@
+import { createBillingQuote, submitBillingQuote } from '../payments/billing-checkout';
+import { saleOptions } from '../plans/billing-pricing';
 import {
   BadRequestException,
   ConflictException,
@@ -17,6 +19,7 @@ import type { Request } from 'express';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { SecurityService } from '../common/crypto/security.service';
 import { CustomerRegisterDto, CustomerLoginDto } from './dto/customer-portal.dto';
+import { latestEligibleRelease } from '../releases/release-policy';
 
 /**
  * A real Argon2id hash of a value nobody can supply. Verifying against it when
@@ -74,7 +77,7 @@ export class CustomerPortalService {
       });
     }
 
-    const selectedPlan = dto.planKey ? await this.prisma.plan.findFirst({ where: { key: dto.planKey, status: 'ACTIVE', price: { gt: 0 }, enforceEntitlements: true } }) : null;
+    const selectedPlan = dto.planKey ? await this.prisma.plan.findFirst({ where: { key: dto.planKey, status: 'ACTIVE', enforceEntitlements: true, OR:[{monthlyPrice:{gt:0}},{yearlyPrice:{gt:0}},{price:{gt:0},billingInterval:'MONTHLY',monthlyPrice:null},{price:{gt:0},billingInterval:'YEARLY',yearlyPrice:null}] } }) : null;
     if (dto.planKey && !selectedPlan) throw new BadRequestException('The selected plan is not available.');
     const customer = await this.prisma.customer.create({
       data: {
@@ -192,12 +195,13 @@ export class CustomerPortalService {
     name: string;
     company: string | null;
     downloadEnabled: boolean;
+    authVersion?: number;
   }) {
     // The audience claim is what stops a portal token being replayed against
     // the admin endpoints and the reverse. Both guards check it on every
     // request, so the separation holds even though one secret signs both.
     const accessToken = await this.jwt.signAsync(
-      { sub: String(customer.id), email: customer.email, name: customer.name },
+      { sub: String(customer.id), email: customer.email, name: customer.name,authVersion:customer.authVersion??0 },
       {
         secret: this.config.get<string>('JWT_ACCESS_SECRET', ''),
         expiresIn: this.config.get<string>('JWT_ACCESS_TTL', '30m'),
@@ -322,12 +326,12 @@ export class CustomerPortalService {
    * be enough: a throwaway address would otherwise be able to pull a 200MB
    * installer, so the owner has to confirm payment first.
    */
-  async download(customerId: number) {
+  async download(customerId: number,planKey?:string) {
     const customer = await this.prisma.customer.findUniqueOrThrow({
       where: { id: customerId },
     });
 
-    if (!customer.downloadEnabled) {
+    if (!customer.downloadEnabled||customer.status!=='ACTIVE'||customer.deletedAt) {
       throw new ForbiddenException({
         code: 'PAYMENT_PENDING',
         message:
@@ -335,18 +339,8 @@ export class CustomerPortalService {
       });
     }
 
-    const release = await this.prisma.appVersion.findFirst({
-      where: { platform: 'WINDOWS', status: 'PUBLISHED' },
-      orderBy: [{ releasedAt: 'desc' }, { buildNumber: 'desc' }],
-      select: {
-        version: true,
-        buildNumber: true,
-        downloadUrl: true,
-        fileSize: true,
-        checksum: true,
-        releasedAt: true,
-      },
-    });
+    const licenses=await this.prisma.license.findMany({where:{customerId,status:{in:['ACTIVE','TRIAL']},OR:[{expiresAt:null},{expiresAt:{gte:new Date(Date.now()-14*86400000)}}],...(planKey?{plan:{key:planKey}}:{})},select:{planId:true}});
+    const release=await latestEligibleRelease(this.prisma,licenses.map(license=>license.planId));
 
     // A missing release is an owner-side configuration problem rather than the
     // customer's fault, so it is a 404 and not a 403.
@@ -362,9 +356,16 @@ export class CustomerPortalService {
   /**
    * The plans a customer can pick from when requesting an activation code.
    */
+  async quote(customerId: number, input: {planId:number;billingInterval:string;subscriptionId?:number}) {
+    return createBillingQuote(this.prisma,customerId,input);
+  }
+  async billingSubscriptions(customerId:number) {
+    return { unlinkedLicenseCount: await this.prisma.license.count({where:{customerId,subscriptionId:null,status:{in:['ACTIVE','TRIAL']}}}), subscriptions: await this.prisma.subscription.findMany({where:{customerId,status:{in:['ACTIVE','TRIAL','EXPIRED']}},orderBy:{createdAt:'desc'},select:{id:true,planId:true,status:true,billingInterval:true,price:true,currency:true,expiresAt:true,plan:{select:{name:true,nameAr:true}}}}) };
+  }
+
   async catalogue() {
     const plans = await this.prisma.plan.findMany({
-      where: { status: 'ACTIVE', price: { gt: 0 }, enforceEntitlements: true },
+      where: { status: 'ACTIVE', enforceEntitlements: true },
       orderBy: { sortOrder: 'asc' },
       select: {
         id: true,
@@ -372,6 +373,7 @@ export class CustomerPortalService {
         name: true,
         nameAr: true,
         price: true,
+        monthlyPrice: true, yearlyPrice: true,
         currency: true,
         billingInterval: true,
         trialDays: true,
@@ -385,7 +387,7 @@ export class CustomerPortalService {
         features: { select: { feature: { select: { key: true, name: true, nameAr: true } } } },
       },
     });
-    return { plans };
+    return { plans: plans.map(plan=>({...plan, billingOptions: saleOptions(plan)})).filter(plan=>plan.billingOptions.length>0) };
   }
 
   /**
@@ -401,6 +403,7 @@ export class CustomerPortalService {
     customerId: number,
     input: {
       planId: number;
+      quoteId?: string; billingInterval?: string;
       amount: number;
       notes?: string;
       receipt: { url: string; size: number };
@@ -408,49 +411,12 @@ export class CustomerPortalService {
     },
     req: Request,
   ) {
-    const customer = await this.prisma.customer.findUniqueOrThrow({
-      where: { id: customerId },
-    });
-
-    if (customer.status === 'SUSPENDED') {
-      throw new ForbiddenException('This account has been suspended. Please contact support.');
-    }
-
-    const plan = await this.prisma.plan.findUnique({
-      where: { id: input.planId },
-      select: { id: true, key: true, name: true, status: true, price: true, setupFee: true, currency: true, enforceEntitlements: true },
-    });
-    if (!plan || plan.status !== 'ACTIVE' || !plan.enforceEntitlements) {
-      throw new BadRequestException('The selected plan is not available.');
-    }
-
-    if (plan.price <= 0) throw new BadRequestException('The selected plan is not priced.');
-    const initialSetup = !customer.downloadEnabled ? plan.setupFee : 0;
-    if (input.amount !== plan.price + initialSetup) throw new BadRequestException('The price changed. Refresh the catalogue before submitting payment.');
-    if (input.subscriptionId) {
-      const subscription = await this.prisma.subscription.findFirst({ where: { id: input.subscriptionId, customerId, planId: plan.id } });
-      if (!subscription) throw new BadRequestException('The subscription does not belong to this customer and plan.');
-    }
-    const payment = await this.prisma.payment.create({
-      data: {
-        customerId,
-        planId: plan.id,
-        subscriptionId: input.subscriptionId ?? null,
-        amount: input.amount,
-        currency: plan.currency,
-        method: 'BANK_TRANSFER',
-        status: 'PENDING',
-        notes: input.notes?.trim() || null,
-        receiptUrl: input.receipt.url,
-        // A per-customer prefix, so the owner can tell whose receipt is whose
-        // while several are open at once, without opening each image.
-        transactionReference: `PORTAL-${customerId}-${Date.now()}`,
-      },
-    });
-
+    const plan = await this.prisma.plan.findUnique({where:{id:input.planId}});
+    const chosen = input.quoteId ? { id: input.quoteId } : await createBillingQuote(this.prisma,customerId,{planId:input.planId,billingInterval:input.billingInterval??plan?.billingInterval??'MONTHLY',subscriptionId:input.subscriptionId});
+    const payment = await submitBillingQuote(this.prisma,customerId,{...input,quoteId:chosen.id});
     await this.recordAudit(req, customerId, 'ACTIVATION_REQUESTED');
     this.logger.log(
-      `Activation requested by customer ${customerId} for plan ${plan.key} (payment ${payment.id})`,
+      `Activation requested by customer ${customerId} for plan ${plan?.key} (payment ${payment.id})`,
     );
 
     return {

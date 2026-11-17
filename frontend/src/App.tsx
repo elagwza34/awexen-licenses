@@ -17,6 +17,7 @@ import { LicenseDetailPage } from '@/pages/license-detail';
 import { LicensesPage } from '@/pages/licenses';
 import { CustomerRegisterPage } from '@/pages/customer-register';
 import { PortalLoginPage } from '@/pages/portal-login';
+import { PortalForgotPasswordPage,PortalResetPasswordPage } from '@/pages/portal-password-recovery';
 import { PortalOverviewPage } from '@/pages/portal-overview';
 import { PortalLicensesPage } from '@/pages/portal-licenses';
 import { PortalSubscriptionPage } from '@/pages/portal-subscription';
@@ -62,6 +63,8 @@ export default function App() {
                   customer creates the account the owner then finds in the
                   panel. The download itself stays behind the payment gate. */}
               <Route path="/portal/register" element={<CustomerRegisterPage />} />
+              <Route path="/portal/forgot-password" element={<PortalForgotPasswordPage />} />
+              <Route path="/portal/reset-password" element={<PortalResetPasswordPage />} />
 
               {/* The customer portal. Kept outside ProtectedRoute on purpose —
                   that guard is for the owner's admin token, and a customer

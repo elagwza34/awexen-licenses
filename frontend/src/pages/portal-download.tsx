@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Clock, Download, Loader2, Monitor, ShieldAlert } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -22,12 +23,13 @@ function fileSize(bytes: number | null): string {
  * to the customer, not the control itself.
  */
 export function PortalDownloadPage() {
+  const [parameters]=useSearchParams();const planKey=parameters.get('planKey')??undefined;
   const [downloading, setDownloading] = useState(false);
   const [downloadError, setDownloadError] = useState('');
   const download = async () => {
     setDownloading(true); setDownloadError('');
     try {
-      const result = await portalApi.installer();
+      const result = await portalApi.installer(planKey);
       const url = new URL(result.release.downloadUrl, window.location.origin);
       if (url.protocol !== 'https:') throw new Error('رابط التنزيل غير متاح حالياً.');
       window.location.assign(url.href);
@@ -35,6 +37,7 @@ export function PortalDownloadPage() {
     finally { setDownloading(false); }
   };
   const overview = useQuery({ queryKey: ['portal', 'overview'], queryFn: portalApi.overview });
+  const eligible=useQuery({queryKey:['portal','installer',planKey],queryFn:()=>portalApi.installer(planKey),enabled:overview.data?.canDownload===true});
 
   if (overview.isLoading) {
     return (
@@ -54,7 +57,8 @@ export function PortalDownloadPage() {
     );
   }
 
-  const { canDownload, latestRelease } = overview.data;
+  const { canDownload } = overview.data;
+  const latestRelease=eligible.data?.release;
 
   return (
     <div className="space-y-6">

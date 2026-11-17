@@ -1,3 +1,5 @@
+import {priceFor} from '../plans/billing-pricing';
+import { createBillingQuote, submitBillingQuote } from '../payments/billing-checkout';
 import {
   BadRequestException,
   ConflictException,
@@ -127,7 +129,7 @@ export class SubscriptionsService {
       ? new Date(dto.expiresAt)
       : this.addInterval(startsAt, interval);
 
-    const price = dto.price ?? plan.price;
+    const price = dto.price ?? (plan.isTrialPlan?0:priceFor(plan,interval));
     const isTrial = plan.isTrialPlan;
     const trialDays = plan.trialDays;
 
@@ -453,73 +455,19 @@ export class SubscriptionsService {
    * manually — inventing a formula here would be a business decision, not a
    * technical one.
    */
+  async quotePlanChange(id:number,dto:ChangeSubscriptionPlanDto) {
+    const subscription=await this.prisma.subscription.findUniqueOrThrow({where:{id}});
+    return createBillingQuote(this.prisma,subscription.customerId,{planId:dto.planId,subscriptionId:id,billingInterval:dto.billingInterval??subscription.billingInterval});
+  }
+
   async changePlan(id: number, dto: ChangeSubscriptionPlanDto, actor: AuditActor, req: Request) {
-    const subscription = await this.prisma.subscription.findUniqueOrThrow({
-      where: { id },
-      include: { plan: true },
-    });
-
-    if (TERMINAL.includes(subscription.status)) {
-      throw new ConflictException('A cancelled subscription cannot change plan');
-    }
-
-    const newPlan = await this.prisma.plan.findUnique({ where: { id: dto.planId } });
-    if (!newPlan) throw new NotFoundException('Target plan not found');
-    if (newPlan.id === subscription.planId) {
-      throw new BadRequestException('The subscription is already on this plan');
-    }
-
-    // A downgrade must not strand devices above the new plan's limit.
-    if (newPlan.maxDevices < subscription.plan.maxDevices) {
-      const active = await this.prisma.device.count({
-        where: { license: { subscriptionId: id }, status: 'ACTIVE' },
-      });
-      if (active > newPlan.maxDevices) {
-        throw new ConflictException(
-          `Cannot downgrade: ${active} active device(s) exceed the new plan's limit of ${newPlan.maxDevices}. Reset devices first.`,
-        );
-      }
-    }
-
-    await this.prisma.$transaction(async (tx) => {
-      await tx.subscription.update({
-        where: { id },
-        data: {
-          planId: newPlan.id,
-          price: newPlan.price,
-          currency: newPlan.currency,
-          billingInterval: newPlan.billingInterval,
-        },
-      });
-
-      if (dto.applyImmediately !== false) {
-        await tx.license.updateMany({
-          where: { subscriptionId: id, status: { notIn: ['REVOKED', 'SUSPENDED'] } },
-          data: { planId: newPlan.id, maxDevices: newPlan.maxDevices, version: { increment: 1 } },
-        });
-      }
-
-      await this.audit.record(
-        {
-          action: 'subscription.plan_changed',
-          entity: AuditEntity.SUBSCRIPTION,
-          entityId: id,
-          oldValue: { planId: subscription.planId, price: subscription.price },
-          newValue: { planId: newPlan.id, price: newPlan.price, planKey: newPlan.key },
-          metadata: {
-            prorationMode: subscription.prorationMode,
-            applyImmediately: dto.applyImmediately !== false,
-            reason: dto.reason,
-            note: 'Proration is not computed automatically; confirm the charge manually.',
-          },
-          tx,
-        },
-        actor,
-        req,
-      );
-    });
-
-    return this.findOne(id);
+    const subscription = await this.prisma.subscription.findUniqueOrThrow({where:{id}});
+    const stored=dto.quoteId?await this.prisma.checkoutQuote.findFirst({where:{id:dto.quoteId,customerId:subscription.customerId}}):null;
+    if(dto.quoteId&&(!stored||(stored.data as any).sourceSubscriptionId!==id||(stored.data as any).planId!==dto.planId))throw new BadRequestException('Quote does not match the subscription or plan.');
+    const quote=stored?{id:stored.id,...stored.data as any}:await this.quotePlanChange(id,dto);
+    const payment = await submitBillingQuote(this.prisma,subscription.customerId,{quoteId:quote.id,planId:dto.planId,amount:quote.amount,notes:dto.reason});
+    await this.audit.record({action:'subscription.upgrade_requested',entity:AuditEntity.SUBSCRIPTION,entityId:id,metadata:{paymentId:payment.id,amount:quote.amount,unusedCredit:quote.credit},newValue:{requestedPlanId:dto.planId}},actor,req);
+    return {payment,quote,paymentRequired:true};
   }
 
   // ------------------------------------------------------------------

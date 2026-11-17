@@ -869,6 +869,23 @@ export class LicensesService {
     throw new ConflictException('Could not generate a unique license key. Please retry.');
   }
 
+  /** Used only within the payment transaction; signing failure rolls back billing. */
+  async createForBilling(tx: Prisma.TransactionClient, data: { customerId: number; subscriptionId: number; planId: number; startsAt: Date; expiresAt: Date; maxDevices: number }) {
+    const license = await tx.license.create({ data: { ...data, licenseKey: generateLicenseKey(this.config.get<string>('LICENSE_KEY_PREFIX','PROD')), status: 'ACTIVE', isTrial: false } });
+    await this.signForBilling(tx, license.id);
+    return license;
+  }
+
+  async signForBilling(tx: Prisma.TransactionClient, licenseId: number) {
+    const license = await tx.license.findUniqueOrThrow({ where: { id: licenseId }, include: { plan: { include: { features: { include: { feature: true } } } } } });
+    const { signature, payloadHash } = this.crypto.sign({
+      licenseKey: license.licenseKey, planKey: license.plan.key, edition: license.plan.name,
+      features: license.plan.features.map(p => p.feature.key).sort(), maxDevices: license.maxDevices,
+      issuedAt: license.createdAt.toISOString(), expiresAt: license.expiresAt?.toISOString() ?? null, version: license.version,
+    });
+    await tx.license.update({ where: { id: licenseId }, data: { signature, payloadHash } });
+  }
+
   /** Recomputes and stores the signature for a license. */
   private async resign(licenseId: number): Promise<void> {
     try {

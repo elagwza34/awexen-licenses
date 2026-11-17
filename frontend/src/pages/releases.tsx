@@ -1,4 +1,10 @@
-import { useQuery } from '@tanstack/react-query';
+import { useMutation,useQuery,useQueryClient } from '@tanstack/react-query';
+import {useState} from 'react';
+import {Button} from '@/components/ui/button';
+import {useAuth} from '@/hooks/use-auth';
+import {useToast} from '@/hooks/use-toast';
+import {useConfirm} from '@/hooks/use-confirm';
+import {ReleaseForm} from './release-form';
 import { Rocket } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -18,6 +24,9 @@ const PLATFORM_LABELS: Record<string, string> = {
 };
 
 export function ReleasesPage() {
+  const {can}=useAuth(),toast=useToast(),cache=useQueryClient();
+  const [creating,setCreating]=useState(false);const {confirm,confirmDialog}=useConfirm();
+  const publish=useMutation({mutationFn:(id:number)=>api.post(`/releases/${id}/publish`),onSuccess:()=>{cache.invalidateQueries({queryKey:['releases']});toast.success('تم نشر الإصدار للخطط المحددة');},onError:error=>toast.error('تعذر النشر',(error as ApiError).friendlyMessage)});
   const query = useQuery({
     queryKey: ['releases'],
     queryFn: () => api.get<{ data: AppVersion[]; meta: { total: number } }>('/releases', { limit: 50 }),
@@ -25,12 +34,15 @@ export function ReleasesPage() {
 
   return (
     <div className="space-y-4">
+      {confirmDialog}
       <header>
         <h1 className="text-xl font-bold">إصدارات التطبيق</h1>
         <p className="text-sm text-muted-foreground">
           الإصدارات المنشورة التي يراها تطبيق العميل عند التحقق — بدون تنزيل تلقائي
         </p>
       </header>
+      {can('releases.create')&&<Button onClick={()=>setCreating(true)}>إصدار جديد</Button>}
+      {creating&&<ReleaseForm onClose={()=>setCreating(false)}/>}
 
       {query.isLoading ? (
         <div className="space-y-3">
@@ -83,6 +95,7 @@ export function ReleasesPage() {
                 <p className="text-xs text-muted-foreground">
                   {version.releasedAt ? `نُشر في ${formatDate(version.releasedAt)}` : 'لم يُنشر بعد'}
                 </p>
+                {version.status==='DRAFT'&&can('releases.publish')&&<Button isLoading={publish.isPending} disabled={publish.isPending} onClick={()=>confirm({title:'نشر الإصدار',description:`نشر ${version.version} للقناة ${version.channel}. سيظهر للعملاء المؤهلين دون تغيير خططهم.`,confirmLabel:'نشر'},()=>publish.mutate(version.id))}>نشر الإصدار</Button>}
                 {version.releaseNotes && (
                   <p className="line-clamp-3 text-xs text-muted-foreground">{version.releaseNotes}</p>
                 )}

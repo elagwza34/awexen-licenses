@@ -123,6 +123,12 @@ export class SubscriptionsController {
     return this.subscriptions.cancel(id, dto, admin, req);
   }
 
+  @Post(':id/change-plan/quote')
+  @RequirePermissions('subscriptions.update')
+  quotePlanChange(@Param('id',ParseIntPipe) id:number,@Body() dto:ChangeSubscriptionPlanDto) {
+    return this.subscriptions.quotePlanChange(id,dto);
+  }
+
   @Post(':id/change-plan')
   @RequirePermissions('subscriptions.update')
   @HttpCode(HttpStatus.OK)

@@ -45,7 +45,10 @@ export interface PortalCustomer {
   createdAt: string;
 }
 
+export interface BillingQuote { id:string;expiresAt:string;planId:number;kind:string;billingInterval:string;amount:number;currency:string;credit:number;setupFee:number;serviceCharge:number;periodStart:string;periodEnd:string;sourceSubscriptionId:number|null }
+export interface BillingSubscription {id:number;planId:number;billingInterval:string;expiresAt:string|null;status:string;plan:{name:string;nameAr:string|null}}
 export interface PortalPlan {
+  billingOptions: {billingInterval:'MONTHLY'|'YEARLY';price:number}[];
   setupFee: number;
   maxUsers: number;
   maxBranches: number;
@@ -167,7 +170,7 @@ async function portalRequest<T>(
 }
 
 export const portalApi = {
-  installer: () => portalRequest<{ release: { downloadUrl: string; version: string; checksum: string | null } }>('/portal/download'),
+  installer: (planKey?:string) => portalRequest<{ release: NonNullable<PortalOverview['latestRelease']> & {downloadUrl:string;checksum:string|null} }>('/portal/download'+(planKey?'?planKey='+encodeURIComponent(planKey):'')),
   register: (body: {
     name: string;
     email: string;
@@ -194,6 +197,9 @@ export const portalApi = {
       data: { id: number; licenseKey: string; status: string; expiresAt: string | null; plan: { name: string; nameAr: string | null } }[];
     }>('/portal/licenses'),
 
+  quote: (body:{planId:number;billingInterval:string;subscriptionId?:number})=>portalRequest<BillingQuote>('/portal/billing-quote',{method:'POST',body}),
+  billingSubscriptions: ()=>portalRequest<{subscriptions:BillingSubscription[];unlinkedLicenseCount?:number}>('/portal/billing-subscriptions'),
+
   catalogue: () => portalRequest<{ plans: PortalPlan[] }>('/portal/catalogue'),
 
   requests: () => portalRequest<{ data: PortalRequest[] }>('/portal/requests'),
@@ -215,10 +221,11 @@ export const portalApi = {
    * Submits the receipt. The plan and amount travel as text fields because the
    * body is multipart; the server parses and validates them.
    */
-  requestActivation: (body: { planId: number; amount: number; notes?: string; receipt: File }) => {
+  requestActivation: (body: { planId: number; amount: number; quoteId:string; notes?: string; receipt: File }) => {
     const form = new FormData();
     form.append('planId', String(body.planId));
     form.append('amount', String(body.amount));
+    form.append('quoteId',body.quoteId);
     if (body.notes) form.append('notes', body.notes);
     form.append('receipt', body.receipt);
     return portalRequest<{ id: number; status: string; message: string }>(

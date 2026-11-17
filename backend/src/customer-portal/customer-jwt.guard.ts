@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import type { Request } from 'express';
+import { PrismaService } from '../common/prisma/prisma.service';
 
 export interface CustomerSession {
   id: number;
@@ -36,14 +37,14 @@ declare module 'express' {
  */
 @Injectable()
 export class CustomerJwtGuard implements CanActivate {
-  constructor(private readonly jwtService: JwtService) {}
+  constructor(private readonly jwtService: JwtService,private readonly db:PrismaService) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<Request>();
     const token = this.extractToken(request);
     if (!token) throw new UnauthorizedException('Sign in to continue.');
 
-    let payload: { sub?: string | number; email?: string; name?: string; aud?: string };
+    let payload: { sub?: string | number; email?: string; name?: string; aud?: string;authVersion?:number };
     try {
       payload = await this.jwtService.verifyAsync(token, {
         audience: 'customer-portal',
@@ -59,6 +60,9 @@ export class CustomerJwtGuard implements CanActivate {
       throw new UnauthorizedException('Invalid session.');
     }
 
+    const customer=await this.db.customer.findUnique({where:{id},select:{status:true,deletedAt:true,authVersion:true}});
+    if(!customer||customer.status!=='ACTIVE'||customer.deletedAt||(payload.authVersion??0)!==customer.authVersion)
+      throw new UnauthorizedException('Your session has ended. Sign in again.');
     request.customer = {
       id,
       email: payload.email ?? '',

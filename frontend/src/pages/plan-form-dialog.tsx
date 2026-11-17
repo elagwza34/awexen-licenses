@@ -1,3 +1,4 @@
+import {minorUnits} from '@/lib/billing-prices';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
@@ -43,6 +44,7 @@ interface FormState {
   nameAr?: string;
   description?: string;
   price: string;
+  monthlyPrice: string; yearlyPrice: string;
   setupFee: string;
   currency: string;
   billingInterval: BillingInterval;
@@ -60,6 +62,8 @@ function toFormState(plan: Plan | null): FormState {
     description: plan?.description ?? '',
     // stored as minor units, edited as major units
     price: plan ? String(plan.price / 100) : '0',
+    monthlyPrice: plan?.monthlyPrice == null ? '' : String(plan.monthlyPrice/100),
+    yearlyPrice: plan?.yearlyPrice == null ? '' : String(plan.yearlyPrice/100),
     setupFee: String((plan?.setupFee ?? 0) / 100),
     currency: plan?.currency ?? 'EGP',
     billingInterval: plan?.billingInterval ?? 'MONTHLY',
@@ -95,8 +99,9 @@ export function PlanFormDialog({ open, plan, features, onOpenChange }: PlanFormP
         name: form.name.trim(),
         nameAr: form.nameAr?.trim() || undefined,
         description: form.description?.trim() || undefined,
-        price: Math.round(Number(form.price) * 100),
-        setupFee: Math.round(Number(form.setupFee) * 100),
+        price: minorUnits(form.price)!,
+        monthlyPrice: minorUnits(form.monthlyPrice,true), yearlyPrice: minorUnits(form.yearlyPrice,true),
+        setupFee: minorUnits(form.setupFee)!,
         currency: form.currency.trim().toUpperCase(),
         billingInterval: form.billingInterval,
         trialDays: Number(form.trialDays) || 0,
@@ -112,7 +117,7 @@ export function PlanFormDialog({ open, plan, features, onOpenChange }: PlanFormP
       toast.success(isEdit ? 'تم تحديث الخطة' : 'تم إنشاء الخطة');
       onOpenChange(false);
     },
-    onError: (error) => toast.error('تعذّر الحفظ', (error as ApiError).friendlyMessage),
+    onError: (error) => toast.error('تعذّر الحفظ', error instanceof ApiError?error.friendlyMessage:error instanceof Error?error.message:'راجع بيانات الخطة.'),
   });
 
   const selectedKeys = selected.map(id => features.find(feature => feature.id === id)?.key ?? '__UNKNOWN__');
@@ -158,9 +163,18 @@ export function PlanFormDialog({ open, plan, features, onOpenChange }: PlanFormP
               <Input value={form.currency} onChange={(e) => setForm({ ...form, currency: e.target.value })}
                 dir="ltr" className="text-start" maxLength={3} />
             </Field>
-            <Field label="السعر *">
+            <Field label="السعر الأساسي للمدة الافتراضية">
               <Input type="number" step="0.01" min="0" value={form.price}
                 onChange={(e) => setForm({ ...form, price: e.target.value })} dir="ltr" className="text-start" />
+              <p className="text-xs text-muted-foreground">يستخدم عند ترك سعر نفس المدة فارغًا؛ الفترات المدفوعة السابقة تحتفظ بقيمتها.</p>
+            </Field>
+            <Field label="السعر الشهري">
+              <Input aria-label="السعر الشهري" type="number" step="0.01" min="0" value={form.monthlyPrice} onChange={e=>setForm({...form,monthlyPrice:e.target.value})} dir="ltr" />
+              <p className="text-xs text-muted-foreground">فارغ: استخدام السعر الأساسي إذا كانت مدته شهرية. صفر: إيقاف بيع الشهر.</p>
+            </Field>
+            <Field label="السعر السنوي">
+              <Input aria-label="السعر السنوي" type="number" step="0.01" min="0" value={form.yearlyPrice} onChange={e=>setForm({...form,yearlyPrice:e.target.value})} dir="ltr" />
+              <p className="text-xs text-muted-foreground">حدد السعر السنوي صراحةً؛ لا يُحسب تلقائيًا من سعر الشهر.</p>
             </Field>
             <Field label="رسوم التفعيل لأول مرة">
               <Input type="number" step="0.01" min="0" value={form.setupFee} onChange={(e) => setForm({ ...form, setupFee: e.target.value })} dir="ltr" />

@@ -96,3 +96,4 @@ backend/cleanup-probe-data.js
 backend/storage/
 storage/
 .hostinger/api-source/
+.release-receipts.enc.json
