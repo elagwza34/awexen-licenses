@@ -1,5 +1,26 @@
 # API on Hostinger
 
+## Publication update — 2026-11-17
+
+The API and portal now include monthly/yearly pricing, credited paid upgrades,
+customer recovery routes, and plan-aware release selection. The existing signing
+key was retained. The three pending additive migrations were applied after an
+access-restricted PostgreSQL backup. Five existing receipt images were restored
+through an encrypted deployment envelope and verified by SHA-256; one historical
+receipt reference was already missing before deployment. SMTP is not configured,
+so real password-recovery delivery remains unavailable until configured.
+
+Git auto-deployment for `licenses.awexen.com` is now **disabled**. A push to master
+triggered a Vite redeployment that replaced `public_html`, including uploaded
+installers. Publish portal assets deliberately and retain/restore the downloads;
+do not re-enable this hook until installer storage survives site replacement.
+The repository connection and branch remain configured. API deployments remain
+explicit source deployments to `api.awexen.com`.
+
+PMS 1.4.11 / build 1411 was published as optional stable release 14. Detailed
+publication and verification evidence lives in the PMS repository's
+`docs/licensing/release-1.4.11-2026-11-17/` directory.
+
 The public frontend and API share `https://licenses.awexen.com`.
 The API base URL is `https://licenses.awexen.com/api/v1`; frontend builds use
 `VITE_API_BASE_URL=/api/v1`. The backend runs on the existing Hostinger Business plan.
