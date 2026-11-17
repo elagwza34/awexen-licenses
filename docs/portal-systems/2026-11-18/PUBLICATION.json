@@ -1,0 +1,145 @@
+{
+  "PublishedLocalDate": "2026-11-18",
+  "CheckedUtc": "2026-11-17T23:11:13.717138+00:00",
+  "MarketingSource": "a097a70",
+  "LicensingSource": "71b463e",
+  "PmsRegressionSource": "a5922f5a",
+  "ApiBuildUuid": "01a1ebbf-bbbc-70ee-9c73-bd68566982b0",
+  "ApiBuildState": "completed",
+  "DatabaseMigration": {
+    "migration_name": "20261117000300_pms_plan_catalogue_parity",
+    "finished_at": "2026-11-17T23:02:35.872Z"
+  },
+  "BackupArchiveVerified": true,
+  "BackupAccessRestricted": true,
+  "PricesPaymentsSubscriptionsAndLicenseIdentityDatesPreserved": true,
+  "IssuerKeyUnchanged": true,
+  "ExistingReceiptsByteVerified": true,
+  "FrontendPublications": [
+    {
+      "Domain": "licenses.awexen.com",
+      "Commit": "71b463e",
+      "UploadedFiles": 3,
+      "AssetHashesVerified": true,
+      "SpaBuildReferencesVerified": true,
+      "IndexUploadedLast": true,
+      "OtherFilesRetained": true
+    },
+    {
+      "Domain": "awexen.com",
+      "Commit": "a097a70",
+      "UploadedFiles": 30,
+      "AssetHashesVerified": true,
+      "SpaBuildReferencesVerified": true,
+      "IndexUploadedLast": true,
+      "OtherFilesRetained": true
+    }
+  ],
+  "PublicPlans": [
+    {
+      "id": 6,
+      "key": "PMS_STARTER",
+      "nameAr": "الأساسية",
+      "setupFee": 300000,
+      "currency": "EGP",
+      "maxUsers": 1,
+      "maxBranches": 1,
+      "maxWarehouses": 1,
+      "maxDevices": 1,
+      "billingOptions": [
+        {
+          "billingInterval": "MONTHLY",
+          "price": 150000
+        },
+        {
+          "billingInterval": "YEARLY",
+          "price": 1530000
+        }
+      ],
+      "includedServices": []
+    },
+    {
+      "id": 7,
+      "key": "PMS_PRO",
+      "nameAr": "النمو",
+      "setupFee": 500000,
+      "currency": "EGP",
+      "maxUsers": 5,
+      "maxBranches": 2,
+      "maxWarehouses": 2,
+      "maxDevices": 4,
+      "billingOptions": [
+        {
+          "billingInterval": "MONTHLY",
+          "price": 350000
+        },
+        {
+          "billingInterval": "YEARLY",
+          "price": 3570000
+        }
+      ],
+      "includedServices": [
+        "WOOCOMMERCE_SETUP"
+      ]
+    },
+    {
+      "id": 8,
+      "key": "PMS_BUSINESS",
+      "nameAr": "المتقدمة",
+      "setupFee": 800000,
+      "currency": "EGP",
+      "maxUsers": 20,
+      "maxBranches": 5,
+      "maxWarehouses": 5,
+      "maxDevices": 10,
+      "billingOptions": [
+        {
+          "billingInterval": "MONTHLY",
+          "price": 650000
+        },
+        {
+          "billingInterval": "YEARLY",
+          "price": 6630000
+        }
+      ],
+      "includedServices": [
+        "WOOCOMMERCE_SETUP",
+        "SHIPPING_SETUP"
+      ]
+    }
+  ],
+  "RealCatalogueBrowser": {
+    "RealCatalogue": true,
+    "MarketingCardsAndSetupServices": true,
+    "YearlyDiscount15Percent": true,
+    "ResourceSelection": true,
+    "SelectedPlanReachesLiveRegistration": true,
+    "RegistrationSubmitted": false,
+    "MobileNoOverflow": true,
+    "PageErrors": []
+  },
+  "SyntheticApiBrowser": {
+    "Cases": [
+      "PMS_STARTER:MONTHLY",
+      "PMS_STARTER:YEARLY",
+      "PMS_PRO:MONTHLY",
+      "PMS_PRO:YEARLY",
+      "PMS_BUSINESS:MONTHLY",
+      "PMS_BUSINESS:YEARLY",
+      "existing-account:slow-catalogue-yearly-selection",
+      "invalid-interval:registration-blocked",
+      "removed-services:no-stale-promises"
+    ],
+    "MarketingMobileAndDesktop": true,
+    "NoBusinessMutations": true,
+    "AllApiResponsesSynthetic": true
+  },
+  "Installer": {
+    "Version": "1.4.11",
+    "Build": 1411,
+    "ExistingLinksVerified": 5,
+    "NewInstallerPublished": false
+  },
+  "SigningKeyOrEnvironmentChanged": false,
+  "SupabaseChanged": false
+}

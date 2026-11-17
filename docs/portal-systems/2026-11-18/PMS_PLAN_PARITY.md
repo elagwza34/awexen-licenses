@@ -33,7 +33,7 @@ PMS already enforces user/branch/warehouse limits from RSA-signed entitlements. 
 
 ## Release state
 
-**Implemented locally; these PMS changes are not published and the production migration is not applied.** A read-only preflight found one active license on each canonical tier. Before release, review reduced user/warehouse capacity with those installations: existing PMS permits remediation and reads but blocks ordinary writes while active records exceed a signed limit. Offline devices receive updated terms on issuer refresh and keep existing leases until their deadlines.
+**Published on 2026-11-18 after the user's explicit publication request.** The production migration, API, licensing portal and Awexen PMS page are deployed. See [publication evidence](PUBLICATION.md). Existing PMS permits remediation and reads but blocks ordinary writes while active records exceed a reduced signed limit. Offline devices receive updated terms on issuer refresh and keep existing leases until their deadlines.
 
 Release requires database backup, migration before the new API, then both frontends. Preserve signing keys and hosted receipts/installers. Licensing frontend Git auto-deployment must stay disabled; use partial frontend publication, with `index.html` last, to avoid deleting downloads. Recheck live plan data, checkout selection and existing installer links after publication.
 
