@@ -83,6 +83,16 @@ export function PortalMySubscriptionsPage() {
     queryKey: ["portal", "billing-subscriptions"],
     queryFn: portalApi.billingSubscriptions,
   });
+  const overview = useQuery({
+    queryKey: ["portal", "overview"],
+    queryFn: portalApi.overview,
+  });
+  const linkedLicenseIds = new Set(
+    subscriptions.data?.subscriptions.flatMap((s) => s.licenses.map((l) => l.id)),
+  );
+  const legacyLicenses = subscriptions.data && overview.data
+    ? overview.data.licenses.filter((l) => !linkedLicenseIds.has(l.id))
+    : [];
   return (
     <div className="space-y-6">
       <header>
@@ -103,7 +113,17 @@ export function PortalMySubscriptionsPage() {
           </Button>
         </div>
       )}
-      {subscriptions.data && !subscriptions.data.subscriptions.length && (
+      {overview.isLoading && <p role="status">جارٍ تحميل التراخيص…</p>}
+      {overview.isError && (
+        <div role="alert" className="space-y-3">
+          <p>تعذر تحميل التراخيص القديمة. لم تتغير بيانات حسابك.</p>
+          <Button className="min-h-11 min-w-11" onClick={() => overview.refetch()}>
+            إعادة تحميل التراخيص
+          </Button>
+          <Link className="block underline" to="/portal/licenses">عرض أكواد التفعيل</Link>
+        </div>
+      )}
+      {subscriptions.data && overview.data && !overview.isError && !subscriptions.data.subscriptions.length && !legacyLicenses.length && (
         <Card>
           <CardContent className="space-y-4 py-8">
             <p>
@@ -116,15 +136,28 @@ export function PortalMySubscriptionsPage() {
           </CardContent>
         </Card>
       )}
-      {!!subscriptions.data?.unlinkedLicenseCount && (
-        <p className="rounded-lg border p-4">
-          لديك أكواد قديمة غير مرتبطة باشتراك.{" "}
-          <Link className="underline" to="/portal/licenses">
-            عرض أكواد التفعيل القديمة
-          </Link>
-        </p>
-      )}
       <div className="grid items-start gap-6 lg:grid-cols-2">
+        {legacyLicenses.map((license) => (
+          <Card key={`legacy-${license.id}`} role="article" aria-label={`ترخيص قديم #${license.id}`}>
+            <CardHeader>
+              <CardTitle>ترخيص قديم — {license.plan.nameAr ?? license.plan.name}</CardTitle>
+              <p>{states[license.status] ?? license.status} · {license.isTrial ? "ترخيص تجريبي" : "ترخيص عادي"}</p>
+            </CardHeader>
+            <CardContent className="space-y-5">
+              <p className="text-sm text-muted-foreground">صدر هذا الترخيص قبل ربط التراخيص بسجلات الاشتراكات. كود التفعيل ومدته محفوظان.</p>
+              <dl className="grid grid-cols-2 gap-4 text-sm">
+                <div><dt className="text-muted-foreground">تاريخ البداية</dt><dd>{date(license.startsAt)}</dd></div>
+                <div><dt className="text-muted-foreground">تاريخ الانتهاء</dt><dd>{date(license.expiresAt)}</dd></div>
+              </dl>
+              <SubscriptionKey license={license} />
+              {overview.data?.canDownload && ["ACTIVE", "TRIAL"].includes(license.status) && (
+                <Button className="min-h-11 min-w-11" asChild>
+                  <Link to={"/portal/download?planKey=" + encodeURIComponent(license.plan.key)}>تنزيل نسخة النظام</Link>
+                </Button>
+              )}
+            </CardContent>
+          </Card>
+        ))}
         {subscriptions.data?.subscriptions.map((s) => (
           <Card key={s.id}>
             <CardHeader>
