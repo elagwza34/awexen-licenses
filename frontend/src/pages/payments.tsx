@@ -295,27 +295,13 @@ export function PaymentsPage() {
         </div>
       )}
 
-      <Dialog open={refunding !== null} onOpenChange={(open) => !open && setRefunding(null)}>
+      <Dialog open={approving !== null} onOpenChange={(open) => !open && setApproving(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>استرداد دفعة</DialogTitle>
-            <DialogDescription>
-              المبلغ الأصلي يبقى كما هو، ويُسجَّل المبلغ المسترد بجانبه.
-            </DialogDescription>
+            <DialogTitle>مراجعة طلب التفعيل</DialogTitle>
+            <DialogDescription>راجع تفاصيل الدفعة والباقة قبل الاعتماد.</DialogDescription>
           </DialogHeader>
-          <form
-            className="space-y-4"
-            onSubmit={(event) => {
-              event.preventDefault();
-              if (refunding) {
-                refund.mutate({
-                  id: refunding.id,
-                  amount: Math.round(Number(refundAmount) * 100),
-                  reason: refundReason,
-                });
-              }
-            }}
-          >
+          <div className="space-y-4">
             {approving && (
               <>
                 <p className="rounded-md bg-muted p-3 text-sm">
@@ -386,7 +372,31 @@ export function PaymentsPage() {
                 </DialogFooter>
               </>
             )}
+          </div>
+        </DialogContent>
+      </Dialog>
 
+      <Dialog open={refunding !== null} onOpenChange={(open) => !open && setRefunding(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>استرداد دفعة</DialogTitle>
+            <DialogDescription>
+              المبلغ الأصلي يبقى كما هو، ويُسجَّل المبلغ المسترد بجانبه.
+            </DialogDescription>
+          </DialogHeader>
+          <form
+            className="space-y-4"
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (refunding) {
+                refund.mutate({
+                  id: refunding.id,
+                  amount: Math.round(Number(refundAmount) * 100),
+                  reason: refundReason,
+                });
+              }
+            }}
+          >
             {refunding && (
               <p className="rounded-md bg-muted p-3 text-sm">
                 المتاح للاسترداد:{' '}
