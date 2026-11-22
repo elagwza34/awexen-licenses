@@ -6,6 +6,7 @@ import {
 import { AuditEntity } from "@prisma/client";
 import { billingQuote, entitlementHash } from "../plans/billing-pricing";
 import { setupAlreadyPaid } from "./setup-fee-policy";
+import type { CustomerMailService } from "../common/mail/customer-mail.service";
 
 export async function createBillingQuote(
   prisma: any,
@@ -70,6 +71,16 @@ export async function submitBillingQuote(
   customerId: number,
   input: any,
 ) {
+  const { payment } = await submitBillingQuoteWithResult(prisma, customerId, input);
+  return payment;
+}
+
+export async function submitBillingQuoteWithResult(
+  prisma: any,
+  customerId: number,
+  input: any,
+  mail?: CustomerMailService,
+) {
   const quote = await prisma.checkoutQuote.findFirst({
     where: { id: input.quoteId, customerId },
   });
@@ -92,7 +103,7 @@ export async function submitBillingQuote(
         throw new ConflictException(
           "The previous request is closed. Refresh the quote.",
         );
-      return existing;
+      return { payment: existing, created: false, billingInterval: q.billingInterval };
     }
     if (+new Date(quote.expiresAt) <= Date.now())
       throw new ConflictException("The quote expired. Refresh it.");
@@ -136,7 +147,7 @@ export async function submitBillingQuote(
           "Subscription changed. Refresh the quote before submitting payment.",
         );
     }
-    return tx.payment.create({
+    const payment = await tx.payment.create({
       data: {
         customerId,
         planId: q.planId,
@@ -151,6 +162,8 @@ export async function submitBillingQuote(
         transactionReference: `QUOTE-${quote.id}`,
       },
     });
+    await mail?.payment(tx, payment, plan, q.billingInterval, false);
+    return { payment, created: true, billingInterval: q.billingInterval };
   });
 }
 
@@ -163,6 +176,7 @@ export async function approveBillingQuote(
   dto: any,
   actor: any,
   req: any,
+  mail?: CustomerMailService,
 ) {
   if (dto.issueLicense === false)
     throw new BadRequestException(
@@ -351,6 +365,7 @@ export async function approveBillingQuote(
       actor,
       req,
     );
+    await mail?.payment(tx, applied, plan, q.billingInterval, true);
     return {
       payment: applied,
       message: "تم تأكيد الدفع وتحديث الاشتراك والترخيص.",

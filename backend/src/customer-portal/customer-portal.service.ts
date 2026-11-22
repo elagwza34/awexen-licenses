@@ -1,4 +1,4 @@
-import { createBillingQuote, submitBillingQuote } from '../payments/billing-checkout';
+import { createBillingQuote, submitBillingQuoteWithResult } from '../payments/billing-checkout';
 import { saleOptions } from '../plans/billing-pricing';
 import {
   BadRequestException,
@@ -14,12 +14,15 @@ import {
 // for the whole app instead of two subtly different ones.
 import { ThrottlerException } from '@nestjs/throttler';
 import { ConfigService } from '@nestjs/config';
-import { JwtService } from '@nestjs/jwt';
+import { JwtService, type JwtSignOptions } from '@nestjs/jwt';
 import type { Request } from 'express';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { SecurityService } from '../common/crypto/security.service';
 import { CustomerRegisterDto, CustomerLoginDto } from './dto/customer-portal.dto';
 import { latestEligibleRelease } from '../releases/release-policy';
+import { OwnerNotificationsService } from './owner-notifications.service';
+import { CustomerMailService } from '../common/mail/customer-mail.service';
+import { RegistrationVerificationService } from './registration-verification.service';
 
 /**
  * A real Argon2id hash of a value nobody can supply. Verifying against it when
@@ -56,6 +59,9 @@ export class CustomerPortalService {
     private readonly security: SecurityService,
     private readonly jwt: JwtService,
     private readonly config: ConfigService,
+    private readonly verification: RegistrationVerificationService,
+    private readonly customerMail: CustomerMailService,
+    private readonly ownerNotifications?: OwnerNotificationsService,
   ) {}
 
   // ---------------------------------------------------------------- signup
@@ -79,22 +85,26 @@ export class CustomerPortalService {
 
     const selectedPlan = dto.planKey ? await this.prisma.plan.findFirst({ where: { key: dto.planKey, status: 'ACTIVE', enforceEntitlements: true, OR:[{monthlyPrice:{gt:0}},{yearlyPrice:{gt:0}},{price:{gt:0},billingInterval:'MONTHLY',monthlyPrice:null},{price:{gt:0},billingInterval:'YEARLY',yearlyPrice:null}] } }) : null;
     if (dto.planKey && !selectedPlan) throw new BadRequestException('The selected plan is not available.');
-    const customer = await this.prisma.customer.create({
-      data: {
-        email,
-        name: dto.name.trim(),
-        company: dto.company?.trim() || null,
-        phone: dto.phone?.trim() || null,
-        country: dto.country?.trim() || null,
-        requestedPlanId: selectedPlan?.id,
-        passwordHash: await this.security.hashPassword(dto.password),
-        // Never taken from the request: registering must not grant a download.
-        downloadEnabled: false,
-        status: 'ACTIVE',
-      },
+    const customer = await this.verification.complete(email, dto.verificationCode, async (tx) => {
+      const account = await tx.customer.create({
+        data: {
+          email,
+          name: dto.name.trim(),
+          company: dto.company?.trim() || null,
+          phone: dto.phone?.trim() || null,
+          country: dto.country?.trim() || null,
+          requestedPlanId: selectedPlan?.id,
+          passwordHash: await this.security.hashPassword(dto.password),
+          downloadEnabled: false,
+          status: 'ACTIVE',
+        },
+      });
+      await this.customerMail.welcome(tx, account);
+      return account;
     });
 
     this.logger.log(`Portal account created for ${customer.email} (id ${customer.id})`);
+    void this.ownerNotifications?.registration(customer, selectedPlan?.nameAr || selectedPlan?.name);
     await this.recordAudit(req, customer.id, 'CUSTOMER_REGISTERED');
     return this.issueSession(customer);
   }
@@ -204,7 +214,7 @@ export class CustomerPortalService {
       { sub: String(customer.id), email: customer.email, name: customer.name,authVersion:customer.authVersion??0 },
       {
         secret: this.config.get<string>('JWT_ACCESS_SECRET', ''),
-        expiresIn: this.config.get<string>('JWT_ACCESS_TTL', '30m'),
+        expiresIn: this.config.get<NonNullable<JwtSignOptions['expiresIn']>>('JWT_ACCESS_TTL', '30m'),
         audience: 'customer-portal',
         issuer: 'awexen',
       },
@@ -421,7 +431,13 @@ export class CustomerPortalService {
   ) {
     const plan = await this.prisma.plan.findUnique({where:{id:input.planId}});
     const chosen = input.quoteId ? { id: input.quoteId } : await createBillingQuote(this.prisma,customerId,{planId:input.planId,billingInterval:input.billingInterval??plan?.billingInterval??'MONTHLY',subscriptionId:input.subscriptionId});
-    const payment = await submitBillingQuote(this.prisma,customerId,{...input,quoteId:chosen.id});
+    const { payment, created, billingInterval } = await submitBillingQuoteWithResult(
+      this.prisma, customerId, { ...input, quoteId: chosen.id }, this.customerMail,
+    );
+    if (created) {
+      const planName = plan?.nameAr || plan?.name || plan?.key || String(input.planId);
+      void this.ownerNotifications?.subscription(payment, planName, billingInterval);
+    }
     await this.recordAudit(req, customerId, 'ACTIVATION_REQUESTED');
     this.logger.log(
       `Activation requested by customer ${customerId} for plan ${plan?.key} (payment ${payment.id})`,

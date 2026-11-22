@@ -12,6 +12,7 @@ import { AuditService, type AuditActor } from '../common/audit/audit.service';
 import { paginated, type PaginatedResponse, type PaginationQueryDto } from '../common/dto/pagination.dto';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { LicensesService } from '../licenses/licenses.service';
+import { CustomerMailService } from '../common/mail/customer-mail.service';
 import {
   ApproveActivationDto,
   CreatePaymentDto,
@@ -43,6 +44,7 @@ export class PaymentsService {
     // Injected so an activation can be approved without the reviewer having to
     // leave the screen and re-find the customer.
     private readonly licenses: LicensesService,
+    private readonly customerMail?: CustomerMailService,
   ) {}
 
   // ------------------------------------------------------------------
@@ -511,7 +513,7 @@ export class PaymentsService {
       include: { customer: true, subscription: true },
     });
 
-    if (payment.checkoutQuoteId) return approveBillingQuote(this.prisma,this.audit,this.licenses,id,dto,actor,req);
+    if (payment.checkoutQuoteId) return approveBillingQuote(this.prisma,this.audit,this.licenses,id,dto,actor,req,this.customerMail);
 
     if (isClosed(payment.status)) {
       throw new ConflictException(`A ${payment.status} payment cannot be approved`);
@@ -564,6 +566,7 @@ export class PaymentsService {
       orderBy: { createdAt: 'desc' },
     });
     if (existing) {
+      await this.queueLegacyApproval(payment, planId);
       return {
         payment,
         license: existing,
@@ -583,7 +586,14 @@ export class PaymentsService {
       req,
     );
 
+    await this.queueLegacyApproval(payment, planId);
     return { payment, license, message: 'تم تأكيد الدفعة وإصدار كود التفعيل.' };
+  }
+
+  private async queueLegacyApproval(payment: { id: number; customerId: number; amount: number; currency: string; subscription: { billingInterval: BillingInterval } | null }, planId: number) {
+    if (!this.customerMail) return;
+    const plan = await this.prisma.plan.findUniqueOrThrow({ where: { id: planId } });
+    await this.customerMail.payment(this.prisma, payment, plan, payment.subscription?.billingInterval ?? plan.billingInterval, true);
   }
 
   /**

@@ -67,6 +67,10 @@ export function CustomerRegisterPage() {
   const {
     register,
     handleSubmit,
+    watch,
+    getValues,
+    trigger,
+    setValue,
     formState: { errors },
   } = useForm<RegisterValues>({
     resolver: zodResolver(registerSchema),
@@ -81,6 +85,14 @@ export function CustomerRegisterPage() {
     },
   });
 
+  const [code, setCode] = useState('');
+  const email = watch('email').trim().toLowerCase();
+  const requestCode = useMutation({
+    mutationFn: (address: string) => api.post('/portal/register/code', { email: address }),
+    onSuccess: () => setCode(''),
+  });
+  const codeRequested = requestCode.isSuccess && requestCode.variables === email;
+
   const mutation = useMutation({
     mutationFn: (values: RegisterValues) =>
       api.post<RegisterResponse>('/portal/register', {
@@ -91,6 +103,7 @@ export function CustomerRegisterPage() {
         phone: values.phone || undefined,
         country: values.country || undefined,
         password: values.password,
+        verificationCode: code,
       }),
     onSuccess: (result) => {
       setPortalToken(result.accessToken);
@@ -109,7 +122,11 @@ export function CustomerRegisterPage() {
       errors={errors}
       onSubmit={(v) => mutation.mutate(v)}
       error={
-        mutation.isError
+        requestCode.isError
+          ? requestCode.error instanceof ApiError
+            ? requestCode.error.friendlyMessage
+            : 'تعذّر إرسال كود التفعيل. حاول مرة أخرى.'
+          : mutation.isError
           ? mutation.error instanceof ApiError
             ? mutation.error.friendlyMessage
             : 'تعذّر إنشاء الحساب. حاول مرة أخرى.'
@@ -117,6 +134,18 @@ export function CustomerRegisterPage() {
       }
       pending={mutation.isPending}
       selectionBlocked={Boolean(planKey && (!selected || !option))}
+      code={code}
+      codeRequested={codeRequested}
+      onCodeChange={setCode}
+      codePending={requestCode.isPending}
+      onRequestCode={async () => {
+        const address = getValues('email').trim().toLowerCase();
+        setValue('email', address);
+        if (await trigger('email')) {
+          mutation.reset();
+          requestCode.mutate(address);
+        }
+      }}
     />
   );
 }
@@ -131,9 +160,14 @@ type RegisterProps = {
   selectionBlocked: boolean;
   selection?: string;
   loginDestination?: string;
+  code: string;
+  codeRequested: boolean;
+  codePending: boolean;
+  onCodeChange: (code: string) => void;
+  onRequestCode: () => void;
 };
 
-function RegisterForm({ register, handleSubmit, errors, onSubmit, error, pending, selectionBlocked, selection, loginDestination }: RegisterProps) {
+function RegisterForm({ register, handleSubmit, errors, onSubmit, error, pending, selectionBlocked, selection, loginDestination, code, codeRequested, codePending, onCodeChange, onRequestCode }: RegisterProps) {
   return (
     <div className="flex min-h-screen items-center justify-center bg-muted/40 p-4">
       <div className="w-full max-w-lg">
@@ -208,7 +242,21 @@ function RegisterForm({ register, handleSubmit, errors, onSubmit, error, pending
 
               <PasswordFields register={register} errors={errors} />
 
-              <Button type="submit" className="w-full" isLoading={pending} disabled={selectionBlocked}>
+              <Button type="button" variant="outline" onClick={onRequestCode} isLoading={codePending} disabled={pending}>
+                {codeRequested ? 'إعادة إرسال الكود' : 'إرسال كود التفعيل'}
+              </Button>
+              {codeRequested && (
+                <div className="space-y-2">
+                  <Label htmlFor="verification-code">كود التفعيل من البريد الإلكتروني</Label>
+                  <Input id="verification-code" value={code} dir="ltr" inputMode="numeric"
+                    autoComplete="one-time-code" maxLength={6}
+                    onChange={(event) => onCodeChange(event.target.value.replace(/[^0-9]/g, ''))} />
+                  <p className="text-xs text-muted-foreground">الكود 6 أرقام وصالح لمدة 10 دقائق.</p>
+                </div>
+              )}
+
+              <Button type="submit" className="w-full" isLoading={pending}
+                disabled={selectionBlocked || codePending || !codeRequested || code.length !== 6}>
                 إنشاء الحساب
               </Button>
             </form>

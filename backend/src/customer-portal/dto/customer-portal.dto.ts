@@ -14,6 +14,9 @@ import {
 } from 'class-validator';
 
 export class CustomerRegisterDto {
+  @Matches(/^\d{6}$/, { message: 'أدخل كود التفعيل المكوّن من 6 أرقام.' })
+  verificationCode!: string;
+
   @ApiPropertyOptional({ description: "Stable catalogue key, including the billing interval." })
   @IsOptional()
   @IsString()
@@ -63,6 +66,12 @@ export class CustomerRegisterDto {
     },
   )
   password!: string;
+}
+
+export class RegistrationCodeDto {
+  @IsEmail()
+  @MaxLength(180)
+  email!: string;
 }
 
 export class CustomerLoginDto {

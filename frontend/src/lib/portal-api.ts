@@ -180,6 +180,7 @@ export const portalApi = {
     name: string;
     email: string;
     password: string;
+    verificationCode: string;
     company?: string;
     phone?: string;
     country?: string;

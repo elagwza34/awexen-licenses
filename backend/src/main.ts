@@ -16,6 +16,7 @@ async function bootstrap() {
   // File sizes from Prisma are BigInt, including portal overview/download and
   // admin release responses. Keep JSON valid without losing large integers.
   app.getHttpAdapter().getInstance().set('json replacer', jsonBigIntReplacer);
+  app.getHttpAdapter().getInstance().set('query parser', 'extended');
 
   // Required for correct req.ip behind the reverse proxy.
   if (String(config.get('TRUST_PROXY')) === 'true') {

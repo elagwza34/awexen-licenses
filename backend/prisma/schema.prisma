@@ -901,6 +901,28 @@ model CustomerPasswordReset {
  @@map("customer_password_resets")
 }
 
+model RegistrationVerification {
+  email String @id @db.VarChar(180)
+  digest String @db.VarChar(64)
+  attempts Int @default(0)
+  expiresAt DateTime @map("expires_at")
+  resendAt DateTime @map("resend_at")
+  @@index([expiresAt])
+  @@map("registration_verifications")
+}
+
+model CustomerEmail {
+  id String @id @db.VarChar(100)
+  email String @db.VarChar(180)
+  subject String
+  body String
+  attempts Int @default(0)
+  availableAt DateTime @default(now()) @map("available_at")
+  sentAt DateTime? @map("sent_at")
+  @@index([sentAt, availableAt])
+  @@map("customer_emails")
+}
+
 model CheckoutQuote {
   id String @id @default(uuid()) @db.Uuid
   customerId Int @map("customer_id")

@@ -1,4 +1,9 @@
 type Interval = 'MONTHLY' | 'YEARLY';
+
+export function portalReturnLocation(location: { pathname: string; search: string; hash: string }) {
+  return location.pathname + location.search + location.hash;
+}
+
 interface CheckoutPlan {
   id: number;
   key: string;

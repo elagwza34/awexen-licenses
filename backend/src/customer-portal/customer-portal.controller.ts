@@ -26,10 +26,12 @@ import {
   BillingQuoteDto,
   CustomerLoginDto,
   CustomerRegisterDto,
+  RegistrationCodeDto,
 } from './dto/customer-portal.dto';
 import { CustomerJwtGuard, CurrentCustomer } from './customer-jwt.guard';
 import { CustomerPortalService } from './customer-portal.service';
 import { CustomerPasswordRecoveryService,ForgotCustomerPasswordDto,ResetCustomerPasswordDto } from './customer-password-recovery.service';
+import { RegistrationVerificationService } from './registration-verification.service';
 
 @ApiTags('Customer portal (public)')
 @Controller('portal')
@@ -38,6 +40,7 @@ export class CustomerPortalController {
     private readonly portal: CustomerPortalService,
     private readonly receipts: ReceiptStorageService,
     private readonly recovery:CustomerPasswordRecoveryService,
+    private readonly verification: RegistrationVerificationService,
   ) {}
 
   @Public() @Post('forgot-password') @HttpCode(HttpStatus.OK)
@@ -47,6 +50,14 @@ export class CustomerPortalController {
   @Public() @Post('reset-password') @HttpCode(HttpStatus.OK)
   @Throttle({default:{limit:10,ttl:60000}})
   resetPassword(@Body() dto:ResetCustomerPasswordDto){return this.recovery.reset(dto.token,dto.password);}
+
+  @Public()
+  @Post('register/code')
+  @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  requestRegistrationCode(@Body() dto: RegistrationCodeDto) {
+    return this.verification.request(dto.email);
+  }
 
   @Public()
   @Post('register')

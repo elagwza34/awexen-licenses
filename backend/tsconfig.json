@@ -11,7 +11,7 @@
     "lib": ["ES2022"],
     "sourceMap": true,
     "outDir": "./dist",
-    "baseUrl": "./",
+    "rootDir": ".",
     "incremental": true,
     "skipLibCheck": true,
     "strict": true,
@@ -21,10 +21,7 @@
     "forceConsistentCasingInFileNames": true,
     "noFallthroughCasesInSwitch": true,
     "strictPropertyInitialization": false,
-    "resolveJsonModule": true,
-    "paths": {
-      "@/*": ["src/*"]
-    }
+    "resolveJsonModule": true
   },
   "include": ["src/**/*", "prisma/**/*", "test/**/*", "scripts/**/*"],
   "exclude": ["node_modules", "dist"]

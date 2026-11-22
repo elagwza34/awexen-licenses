@@ -4,6 +4,9 @@ import { PrismaModule } from '../common/prisma/prisma.module';
 import { PaymentsModule } from '../payments/payments.module';
 import { CustomerPortalController } from './customer-portal.controller';
 import { CustomerPortalService } from './customer-portal.service';
+import { OwnerNotificationsService } from './owner-notifications.service';
+import { CustomerMailModule } from '../common/mail/customer-mail.module';
+import { RegistrationVerificationService } from './registration-verification.service';
 import { CustomerPasswordRecoveryService,CustomerPasswordMailService } from './customer-password-recovery.service';
 
 /**
@@ -20,9 +23,9 @@ import { CustomerPasswordRecoveryService,CustomerPasswordMailService } from './c
 @Module({
   // PaymentsModule brings ReceiptStorageService, which validates the uploaded
   // bank-transfer receipt before it is written to disk.
-  imports: [PrismaModule, CryptoModule, PaymentsModule],
+  imports: [PrismaModule, CryptoModule, PaymentsModule, CustomerMailModule],
   controllers: [CustomerPortalController],
-  providers: [CustomerPortalService,CustomerPasswordRecoveryService,CustomerPasswordMailService],
+  providers: [CustomerPortalService,CustomerPasswordRecoveryService,CustomerPasswordMailService,OwnerNotificationsService,RegistrationVerificationService],
   exports: [CustomerPortalService],
 })
 export class CustomerPortalModule {}

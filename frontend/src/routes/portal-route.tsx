@@ -1,5 +1,6 @@
 import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { usePortalSession } from '@/hooks/use-portal';
+import { portalReturnLocation } from '@/lib/checkout-selection';
 
 /**
  * Gate for the customer portal.
@@ -18,7 +19,7 @@ export function PortalRoute() {
   const location = useLocation();
 
   if (!signedIn) {
-    return <Navigate to="/portal/login" replace state={{ from: location.pathname }} />;
+    return <Navigate to="/portal/login" replace state={{ from: portalReturnLocation(location) }} />;
   }
 
   return <Outlet />;

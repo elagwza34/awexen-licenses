@@ -110,6 +110,6 @@ if (ENV_FILES.length === 0) {
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
-    consumer.apply(requestIdMiddleware).forRoutes('*');
+    consumer.apply(requestIdMiddleware).forRoutes('{*path}');
   }
 }

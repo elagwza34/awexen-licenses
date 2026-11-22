@@ -6,6 +6,8 @@ const { generateKeyPairSync } = require("node:crypto");
 const { PrismaClient } = require("@prisma/client");
 const { ConfigService } = require("@nestjs/config");
 const { AuditService } = require("../src/common/audit/audit.service");
+const { CustomerMailService } = require("../src/common/mail/customer-mail.service");
+const { RegistrationVerificationService } = require("../src/customer-portal/registration-verification.service");
 const {
   LicenseCryptoService,
 } = require("../src/common/crypto/license-crypto.service");
@@ -17,6 +19,7 @@ const {
 const {
   createBillingQuote,
   submitBillingQuote,
+  submitBillingQuoteWithResult,
   approveBillingQuote,
 } = require("../src/payments/billing-checkout");
 
@@ -97,18 +100,30 @@ test("isolated billing: paid purchase, concurrent approvals, renewals, proration
         features: { create: [{ featureId: pos.id }] },
       },
     });
+    const mailConfig = new ConfigService({ JWT_ACCESS_SECRET: "fixture-secret" });
+    const mail = new CustomerMailService(mailConfig, db);
+    const delivered = [];
+    mail.send = async (email, subject, body) => delivered.push({ email, subject, body });
+    const verification = new RegistrationVerificationService(db, mailConfig, mail);
     const portal = new CustomerPortalService(
       db,
       { hashPassword: async () => "fixture-hash" },
       { signAsync: async () => "fixture-session" },
       new ConfigService({}),
+      verification,
+      mail,
     );
+    const registrationEmail = "explicit-prices@example.invalid";
+    await verification.request(registrationEmail);
+    assert.equal(await db.customer.count({ where: { email: registrationEmail } }), 0);
+    const verificationCode = delivered[0].body.match(/\d{6}/)[0];
     await portal.register(
       {
-        email: "explicit-prices@example.invalid",
+        email: registrationEmail,
         name: "Explicit fixture",
         password: "Fixture-Password-42!",
         planKey: dual.key,
+        verificationCode,
       },
       req,
     );
@@ -156,20 +171,32 @@ test("isolated billing: paid purchase, concurrent approvals, renewals, proration
       /amount/,
     );
     const submit = () =>
-      submitBillingQuote(db, customer.id, {
+      submitBillingQuoteWithResult(db, customer.id, {
         quoteId: quote.id,
         planId: basic.id,
         amount: quote.amount,
         receipt: { url: "/fixture/receipt" },
-      });
-    const payments = await Promise.all([submit(), submit()]);
+      }, mail);
+    const payments = (await Promise.all([submit(), submit()])).map(result => result.payment);
     assert.equal(payments[0].id, payments[1].id);
     assert.equal(await db.payment.count(), 1);
     assert.equal(await db.license.count(), 0);
     await Promise.all([
-      approveBillingQuote(db, audit, licenses, payments[0].id, {}, actor, req),
-      approveBillingQuote(db, audit, licenses, payments[0].id, {}, actor, req),
+      approveBillingQuote(db, audit, licenses, payments[0].id, {}, actor, req, mail),
+      approveBillingQuote(db, audit, licenses, payments[0].id, {}, actor, req, mail),
     ]);
+    const notifications = await db.customerEmail.findMany({ orderBy: { id: 'asc' } });
+    assert.deepEqual(notifications.slice(0, 2).map(message => message.id), [`approved:${payments[0].id}`, `pending:${payments[0].id}`]);
+    assert.equal(notifications.length, 3);
+    assert.match(notifications[2].id, /^welcome:/);
+    assert.equal(notifications[2].email, registrationEmail);
+    assert.equal(notifications[0].email, customer.email);
+    assert.ok(notifications[0].body.includes('/portal/download?planKey=' + encodeURIComponent(basic.key)));
+    assert.ok(notifications[1].body.includes('400.00'));
+    await mail.deliver();
+    await mail.deliver();
+    assert.equal(delivered.length, 4);
+    assert.equal(await db.customerEmail.count({ where: { sentAt: null } }), 0);
     assert.equal(await db.subscription.count(), 1);
     assert.equal(await db.license.count(), 1);
     let license = await db.license.findFirstOrThrow(),

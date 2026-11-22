@@ -6,6 +6,9 @@ const source=require('node:fs').readFileSync(require('node:path').join(__dirname
 new Function('exports','require','module',ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText)(helper.exports,require,helper);
 const {checkoutDestination,resolveCheckoutSelection,parseBillingInterval}=helper.exports;
 const plans=[{id:6,key:'PMS_STARTER',system:{key:'PMS'},billingOptions:[{billingInterval:'MONTHLY',price:150000},{billingInterval:'YEARLY',price:1530000}]},{id:7,key:'PMS_PRO',system:{key:'PMS'},billingOptions:[{billingInterval:'MONTHLY',price:350000}]}];
+test('sign-in return location retains plan, interval and subscription query',()=>{
+ assert.equal(helper.exports.portalReturnLocation({pathname:'/portal/subscription/PMS',search:'?plan=PMS_PRO&billingInterval=YEARLY',hash:''}),'/portal/subscription/PMS?plan=PMS_PRO&billingInterval=YEARLY');
+});
 test('registration destination preserves the selected system, plan and yearly interval',()=>{
  assert.equal(checkoutDestination(plans[0],'YEARLY'),'/portal/subscription/PMS?plan=PMS_STARTER&billingInterval=YEARLY');
  assert.equal(checkoutDestination(undefined,'MONTHLY'),'/portal/subscription');

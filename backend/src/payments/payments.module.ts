@@ -4,12 +4,13 @@ import { PaymentsController } from './payments.controller';
 import { PaymentsService } from './payments.service';
 import { ReceiptsController } from './receipts.controller';
 import { ReceiptStorageService } from './receipt-storage.service';
+import { CustomerMailModule } from '../common/mail/customer-mail.module';
 
 @Module({
   // LicensesModule is imported so approving a portal activation can issue the
   // licence through the one implementation that owns key generation and
   // signing, rather than a second copy of that logic here.
-  imports: [LicensesModule],
+  imports: [LicensesModule, CustomerMailModule],
   controllers: [PaymentsController, ReceiptsController],
   providers: [PaymentsService, ReceiptStorageService],
   // ReceiptStorageService is exported so the customer portal can validate and
